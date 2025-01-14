@@ -1,18 +1,134 @@
-name: Docker Image CI
+name: DNS Stack CI/CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      unbound_version:
+        description: 'Unbound version'
+        required: false
+      adguard_version:
+        description: 'AdGuard version'
+        required: false
+      redis_version:
+        description: 'Redis version'
+        required: false
+  schedule:
+    - cron: '0 0 * * *'  # Run daily
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      unbound_version: ${{ env.UNBOUND_VERSION }}
+      adguard_version: ${{ env.ADGUARD_VERSION }}
+      build_needed: ${{ steps.check.outputs.build_needed }}
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Get Latest Versions
+      id: versions
+      run: |
+        if [ -n "${{ github.event.inputs.unbound_version }}" ]; then
+          UNBOUND_VERSION="${{ github.event.inputs.unbound_version }}"
+        else
+          UNBOUND_VERSION=$(curl -s https://nlnetlabs.nl/downloads/unbound/ | grep -oP 'unbound-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.tar\.gz)' | sort -V | tail -n1)
+        fi
+
+        if [ -n "${{ github.event.inputs.adguard_version }}" ]; then
+          ADGUARD_VERSION="${{ github.event.inputs.adguard_version }}"
+        else
+          ADGUARD_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | jq -r .tag_name)
+        fi
+
+        if [ -n "${{ github.event.inputs.redis_version }}" ]; then
+          REDIS_VERSION="${{ github.event.inputs.redis_version }}"
+        else
+          # Get major.minor version only for Redis
+          REDIS_VERSION=$(curl -s https://api.github.com/repos/redis/redis/tags | jq -r '.[0].name' | sed 's/^v//' | cut -d'.' -f1,2)
+        fi
+        
+        # Set both env and output variables
+        echo "unbound_version=${UNBOUND_VERSION}" >> $GITHUB_OUTPUT
+        echo "adguard_version=${ADGUARD_VERSION}" >> $GITHUB_OUTPUT
+        echo "UNBOUND_VERSION=${UNBOUND_VERSION}" >> $GITHUB_ENV
+        echo "ADGUARD_VERSION=${ADGUARD_VERSION}" >> $GITHUB_ENV
+
+    - name: Update Dockerfile Versions
+      id: version_check
+      run: |
+        # Get current versions from Dockerfile
+        CURRENT_UNBOUND=$(grep "ARG UNBOUND_VERSION=" Dockerfile | cut -d'"' -f2)
+        CURRENT_ADGUARD=$(grep "ARG ADGUARD_VERSION=" Dockerfile | cut -d'"' -f2)
+        
+        echo "Current versions in Dockerfile:"
+        echo "CURRENT_UNBOUND=${CURRENT_UNBOUND}"
+        echo "CURRENT_ADGUARD=${CURRENT_ADGUARD}"
+        echo "New versions:"
+        echo "UNBOUND_VERSION=${UNBOUND_VERSION}"
+        echo "ADGUARD_VERSION=${ADGUARD_VERSION}"
+        
+        if [ "${CURRENT_UNBOUND}" = "${UNBOUND_VERSION}" ] && [ "${CURRENT_ADGUARD}" = "${ADGUARD_VERSION}" ]; then
+          echo "versions_current=true" >> $GITHUB_OUTPUT
+          echo "No updates needed, versions are current"
+          exit 0
+        fi
+        
+        sed -i.bak "s|ARG UNBOUND_VERSION=.*|ARG UNBOUND_VERSION=\"${UNBOUND_VERSION}\"|" Dockerfile
+        sed -i.bak "s|ARG ADGUARD_VERSION=.*|ARG ADGUARD_VERSION=\"${ADGUARD_VERSION}\"|" Dockerfile
+        rm -f Dockerfile.bak
+        echo "versions_current=false" >> $GITHUB_OUTPUT
+        echo "DOCKERFILE_UPDATED=true" >> $GITHUB_ENV
+
+    - name: Commit and push if changed
+      if: steps.version_check.outputs.versions_current == 'false'
+      run: |
+        git config --global user.name 'GitHub Actions Bot'
+        git config --global user.email 'actions@github.com'
+        git add Dockerfile
+        git commit -m "chore: update Unbound to ${UNBOUND_VERSION} and AdGuard to ${ADGUARD_VERSION}"
+        git push origin main
+
+    - name: Set build needed flag
+      id: check
+      run: |
+        if [ "${{ steps.version_check.outputs.versions_current }}" = "true" ]; then
+          echo "build_needed=false" >> $GITHUB_OUTPUT
+        else
+          echo "build_needed=true" >> $GITHUB_OUTPUT
+        fi
 
   build:
-
+    needs: check-versions
+    if: needs.check-versions.outputs.build_needed == 'true'
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag dns-stack:$(date +%s)
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          cpreda/dns-stack:latest
+          cpreda/dns-stack:u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}
+        build-args: |
+          UNBOUND_VERSION=${{ needs.check-versions.outputs.unbound_version }}
+          ADGUARD_VERSION=${{ needs.check-versions.outputs.adguard_version }}

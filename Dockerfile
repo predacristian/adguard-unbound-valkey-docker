@@ -1,5 +1,8 @@
-# Base image
 FROM alpine:latest
+
+# Define build arguments with default versions
+ARG UNBOUND_VERSION="1.19.3"
+ARG ADGUARD_VERSION="v0.107.41"
 
 # System updates and base dependencies
 RUN apk update && \
@@ -19,9 +22,9 @@ RUN apk update && \
         perl
 
 # Install and configure Unbound DNS
-RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-latest.tar.gz && \
+RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz && \
     mkdir unbound-latest && \
-    tar -xzf unbound-latest.tar.gz --strip-components=1 -C unbound-latest && \
+    tar -xzf unbound-${UNBOUND_VERSION}.tar.gz --strip-components=1 -C unbound-latest && \
     (cd unbound-latest && \
         ./configure \
             --with-libhiredis \
@@ -36,9 +39,8 @@ RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-latest.tar.gz && \
         make install) && \
     rm -rf unbound-latest*
 
-# Install latest AdGuard Home
-RUN LATEST_VERSION="$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | grep '\"tag_name\"' | sed -E 's/.*\"([^"]+)\".*/\1/')" && \
-    wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${LATEST_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
+# Install AdGuard Home
+RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
     tar -xzf /tmp/AdGuardHome.tar.gz -C /opt && \
     rm /tmp/AdGuardHome.tar.gz
 
