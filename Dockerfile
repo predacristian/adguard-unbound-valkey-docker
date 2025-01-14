@@ -1,8 +1,8 @@
 FROM alpine:latest
 
 # Define build arguments with default versions
-ARG UNBOUND_VERSION="1.21.0"
-ARG ADGUARD_VERSION="v0.101.55"
+ARG UNBOUND_VERSION="1.22.0"
+ARG ADGUARD_VERSION="v0.107.55"
 
 # System updates and base dependencies
 RUN apk update && \
