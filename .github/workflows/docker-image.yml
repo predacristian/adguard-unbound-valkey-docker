@@ -45,7 +45,6 @@ jobs:
           ADGUARD_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | jq -r .tag_name)
         fi
         
-        # Set both env and output variables
         echo "unbound_version=${UNBOUND_VERSION}" >> $GITHUB_OUTPUT
         echo "adguard_version=${ADGUARD_VERSION}" >> $GITHUB_OUTPUT
         echo "UNBOUND_VERSION=${UNBOUND_VERSION}" >> $GITHUB_ENV
@@ -54,11 +53,9 @@ jobs:
     - name: Update Dockerfile Versions
       id: version_check
       run: |
-        # Get current versions from Dockerfile
         CURRENT_UNBOUND=$(grep "ARG UNBOUND_VERSION=" Dockerfile | cut -d'"' -f2)
         CURRENT_ADGUARD=$(grep "ARG ADGUARD_VERSION=" Dockerfile | cut -d'"' -f2)
         
-        echo "Current versions in Dockerfile:"
         echo "CURRENT_UNBOUND=${CURRENT_UNBOUND}"
         echo "CURRENT_ADGUARD=${CURRENT_ADGUARD}"
         echo "New versions:"
@@ -103,6 +100,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+    
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
@@ -116,10 +116,11 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
+        platforms: linux/amd64,linux/arm64
         push: true
         tags: |
-          cpreda/dns-stack:latest
-          cpreda/dns-stack:u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}
         build-args: |
           UNBOUND_VERSION=${{ needs.check-versions.outputs.unbound_version }}
           ADGUARD_VERSION=${{ needs.check-versions.outputs.adguard_version }}
