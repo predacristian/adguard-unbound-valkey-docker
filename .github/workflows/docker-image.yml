@@ -9,9 +9,7 @@ on:
       adguard_version:
         description: 'AdGuard version'
         required: false
-      redis_version:
-        description: 'Redis version'
-        required: false
+
   schedule:
     - cron: '0 0 * * *'  # Run daily
   push:
@@ -45,13 +43,6 @@ jobs:
           ADGUARD_VERSION="${{ github.event.inputs.adguard_version }}"
         else
           ADGUARD_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | jq -r .tag_name)
-        fi
-
-        if [ -n "${{ github.event.inputs.redis_version }}" ]; then
-          REDIS_VERSION="${{ github.event.inputs.redis_version }}"
-        else
-          # Get major.minor version only for Redis
-          REDIS_VERSION=$(curl -s https://api.github.com/repos/redis/redis/tags | jq -r '.[0].name' | sed 's/^v//' | cut -d'.' -f1,2)
         fi
         
         # Set both env and output variables
