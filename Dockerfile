@@ -1,7 +1,7 @@
 FROM alpine:latest
 
-ARG UNBOUND_VERSION="1.21.0"
-ARG ADGUARD_VERSION="v0.106.55"
+ARG UNBOUND_VERSION="1.22.0"
+ARG ADGUARD_VERSION="v0.107.55"
 
 RUN apk update && \
     apk upgrade && \
