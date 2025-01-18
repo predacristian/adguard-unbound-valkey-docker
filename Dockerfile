@@ -10,6 +10,7 @@ RUN apk update && \
         curl \
         redis \
         unbound \
+        bind-tools \
         build-base \
         openssl-dev \
         libexpat \

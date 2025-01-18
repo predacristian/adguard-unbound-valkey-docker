@@ -44,33 +44,21 @@ jobs:
         sudo sysctl -w net.core.wmem_max=8388608
         
         docker run -d --name dns-stack-test \
-          --privileged \
-          -p 5353:53/tcp \
-          -p 5353:53/udp \
-          -p 3001:3000 \
-          -p 5335:5335 \
-          -p 6380:6379 \
+          -v ${{ github.workspace }}/tests:/tests \
           dns-stack-test:${{ steps.tag.outputs.tag }}
 
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to initialize..."
-        sleep 45  # Increased wait time for services
+        sleep 25  # Increased wait time for services
         docker ps
         docker logs dns-stack-test
 
-    - name: Copy and prepare test scripts
+    - name: Set permissions on test scripts
       run: |
-        # Create test directory in container
-        docker exec dns-stack-test mkdir -p /tests
-        
-        # Copy test files
-        docker cp ./tests/test_unbound.sh dns-stack-test:/tests/
-        docker cp ./tests/test_redis.sh dns-stack-test:/tests/
-        docker cp ./tests/test_adguard.sh dns-stack-test:/tests/
-        
-        # Set permissions
-        docker exec dns-stack-test chmod +x /tests/test_*.sh
+        chmod +x ./tests/test_unbound.sh
+        chmod +x ./tests/test_redis.sh
+        chmod +x ./tests/test_adguard.sh
 
     - name: Run Unbound DNS tests
       id: unbound

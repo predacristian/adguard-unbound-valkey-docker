@@ -6,7 +6,7 @@ echo "Running AdGuard Home server test..."
 # Function to check ports
 check_ports() {
     echo "Checking ports status..."
-    netstat -tuln | grep -E ':(5353|3001)'
+    netstat -tuln | grep -E ':(5353|3000)'
 }
 
 # Function to check process
@@ -25,7 +25,7 @@ web_accessible=false
 i=1
 while [ $i -le 3 ]; do
     # Try with follow redirects (-L) and ignore SSL errors (-k)
-    status_code=$(curl -k -L -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001)
+    status_code=$(curl -k -L -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000)
     echo "Attempt $i: HTTP status code: ${status_code}"
     if [ "$status_code" -eq 200 ] || [ "$status_code" -eq 302 ] || [ "$status_code" -eq 307 ]; then
         echo "AdGuard Home web interface is accessible"
@@ -46,7 +46,9 @@ echo "Testing DNS resolution..."
 dns_working=false
 i=1
 while [ $i -le 3 ]; do
-    if nslookup example.com 127.0.0.1:5353 > /dev/null 2>&1; then
+    nslookup_output=$(nslookup example.com 127.0.0.1)
+    echo "$nslookup_output"
+    if echo "$nslookup_output" | grep -q 'Address'; then
         echo "DNS resolution test passed"
         dns_working=true
         break
