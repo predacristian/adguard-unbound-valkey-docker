@@ -121,9 +121,9 @@ jobs:
 
   build:
     needs: [check-versions, check-changes]
-    if: |
-      needs.check-versions.outputs.build_needed == 'true' || 
-      needs.check-changes.outputs.files_changed == 'true'
+    if: >
+      (needs.check-versions.outputs.build_needed == 'true' || needs.check-changes.outputs.files_changed == 'true')
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
