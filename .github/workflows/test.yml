@@ -87,20 +87,3 @@ jobs:
       run: |
         docker stop dns-stack-test || true
         docker rm dns-stack-test || true
-
-  notify:
-    needs: build-and-test
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notify on failure
-      if: needs.build-and-test.result == 'failure'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          github.rest.issues.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            title: '🚨 Test failure on branch ' + context.ref.split('/').pop(),
-            body: 'Tests failed on commit ' + context.sha + '. Please check the [workflow run](' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details.'
-          })
