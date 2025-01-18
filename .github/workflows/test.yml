@@ -38,13 +38,13 @@ jobs:
         cache-to: type=gha,mode=max
 
     - name: Start test container
-      run: |
+      run: |        
         docker run -d --name dns-stack-test \
-          -p 53:53/tcp \
-          -p 53:53/udp \
-          -p 3000:3000 \
+          -p 5353:53/tcp \
+          -p 5353:53/udp \
+          -p 3001:3000 \
           -p 5335:5335 \
-          -p 6379:6379 \
+          -p 6380:6379 \
           dns-stack-test:${{ steps.tag.outputs.tag }}
 
     - name: Wait for services to be ready

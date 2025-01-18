@@ -11,7 +11,7 @@ check_unbound_process() {
 # Function to check DNS ports
 check_dns_ports() {
     echo "Checking DNS ports status..."
-    netstat -tuln | grep -E ':(53|5335)'
+    netstat -tuln | grep -E ':(5353|5335)'
 }
 
 # Show diagnostic information
@@ -22,7 +22,7 @@ check_dns_ports
 dns_working=false
 i=1
 while [ $i -le 3 ]; do
-    if dig +short @127.0.0.1 -p 5335 google.com > /dev/null; then
+    if dig +short @127.0.0.1 -p 5353 google.com > /dev/null; then
         dns_working=true
         echo "Basic DNS resolution working"
         break
@@ -42,21 +42,21 @@ echo "Testing DNSSEC validation..."
 
 # Test valid DNSSEC
 echo "Testing valid DNSSEC domain (dnssec.works)..."
-if ! dig @127.0.0.1 -p 5335 dnssec.works | grep -q 'status: NOERROR'; then
+if ! dig @127.0.0.1 -p 5353 dnssec.works | grep -q 'status: NOERROR'; then
     echo "Valid DNSSEC test failed"
     exit 1
 fi
 
 # Test invalid DNSSEC
 echo "Testing invalid DNSSEC domain (fail01.dnssec.works)..."
-if ! dig @127.0.0.1 -p 5335 fail01.dnssec.works | grep -q 'status: SERVFAIL'; then
+if ! dig @127.0.0.1 -p 5353 fail01.dnssec.works | grep -q 'status: SERVFAIL'; then
     echo "Invalid DNSSEC test failed"
     exit 1
 fi
 
 # Test reverse DNS
 echo "Testing reverse DNS..."
-if ! dig @127.0.0.1 -p 5335 -x 8.8.8.8 | grep -q 'dns.google'; then
+if ! dig @127.0.0.1 -p 5353 -x 8.8.8.8 | grep -q 'dns.google'; then
     echo "Reverse DNS test failed"
     exit 1
 fi
@@ -64,7 +64,7 @@ fi
 # Test response time
 echo "Testing DNS response time..."
 start_time=$(date +%s%N)
-dig @127.0.0.1 -p 5335 +short google.com > /dev/null
+dig @127.0.0.1 -p 5353 +short google.com > /dev/null
 end_time=$(date +%s%N)
 duration=$((($end_time - $start_time)/1000000))
 echo "Response time: ${duration}ms"
