@@ -6,13 +6,32 @@ on:
     branches:
       - '**'
       - '!main'
+    paths:
+      - 'tests/**'
+      - 'Dockerfile'
+      - '.github/workflows/test.yml'
+      - '!README.md'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches:
       - '**'
+    paths:
+      - 'tests/**'
+      - 'Dockerfile'
+      - '.github/workflows/test.yml'
+      - '!README.md'
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
     
     steps:
     - uses: actions/checkout@v4

@@ -11,8 +11,52 @@ on:
         required: false
   push:
     branches: [ "main" ]
+    paths:
+      - 'Dockerfile'
+      - 'config/**'
+      - 'entrypoint.sh'
+      - 'init-config.sh'
+      - '.github/workflows/docker-image.yml'
+      - '!README.md'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ "main" ]
+    paths:
+      - 'Dockerfile'
+      - 'config/**'
+      - 'entrypoint.sh'
+      - 'init-config.sh'
+      - '.github/workflows/docker-image.yml'
+      - '!README.md'
+
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  check-changes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      files_changed: ${{ steps.check_files.outputs.changed }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    
+    - name: Check for relevant file changes
+      id: check_files
+      run: |
+        git diff --name-only HEAD^ HEAD > changed_files.txt
+        echo "Changed files:"
+        cat changed_files.txt
+        
+        if grep -qE '^(Dockerfile|config/|entrypoint\.sh|init-config\.sh)' changed_files.txt; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+
   check-versions:
     runs-on: ubuntu-latest
     permissions:
@@ -88,9 +132,13 @@ jobs:
         fi
 
   build:
-    needs: check-versions
-    if: needs.check-versions.outputs.build_needed == 'true'
+    needs: [check-versions, check-changes]
+    if: |
+      needs.check-versions.outputs.build_needed == 'true' || 
+      needs.check-changes.outputs.files_changed == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
 
     steps:
     - uses: actions/checkout@v4
@@ -107,6 +155,14 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     
+    - name: Generate unique tag
+      id: tags
+      run: |
+        SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+        VERSION_TAG="u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}"
+        echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
+        echo "build_tag=${VERSION_TAG}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
     - name: Build and push
       uses: docker/build-push-action@v5
       with:
@@ -115,7 +171,8 @@ jobs:
         push: true
         tags: |
           ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest
-          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.version_tag }}
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.build_tag }}
         build-args: |
           UNBOUND_VERSION=${{ needs.check-versions.outputs.unbound_version }}
           ADGUARD_VERSION=${{ needs.check-versions.outputs.adguard_version }}
