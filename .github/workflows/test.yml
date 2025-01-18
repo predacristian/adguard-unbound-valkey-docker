@@ -1,4 +1,4 @@
-name: DNS Stack Tests
+name: 1. DNS Stack Tests
 
 on:
   workflow_dispatch:
