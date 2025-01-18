@@ -1,0 +1,106 @@
+name: DNS Stack Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+      - '!main'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Generate test tag
+      id: tag
+      run: |
+        BRANCH_NAME=${GITHUB_REF##*/}
+        CLEAN_BRANCH_NAME=$(echo $BRANCH_NAME | tr '/' '-')
+        SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+        echo "tag=${CLEAN_BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+    - name: Build test image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        load: true
+        tags: dns-stack-test:${{ steps.tag.outputs.tag }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Start test container
+      run: |
+        docker run -d --name dns-stack-test \
+          -p 53:53/tcp \
+          -p 53:53/udp \
+          -p 3000:3000 \
+          -p 5335:5335 \
+          -p 6379:6379 \
+          dns-stack-test:${{ steps.tag.outputs.tag }}
+
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for services to initialize..."
+        sleep 30
+        docker ps
+        docker logs dns-stack-test
+
+    - name: Copy test scripts to container
+      run: |
+        docker cp ./tests/test_unbound.sh dns-stack-test:/test_unbound.sh
+        docker cp ./tests/test_redis.sh dns-stack-test:/test_redis.sh
+        docker cp ./tests/test_adguard.sh dns-stack-test:/test_adguard.sh
+        docker exec dns-stack-test chmod +x /test_*.sh
+
+    - name: Run Unbound DNS tests
+      id: unbound
+      run: docker exec dns-stack-test /test_unbound.sh
+      
+    - name: Run Redis tests
+      id: redis
+      run: docker exec dns-stack-test /test_redis.sh
+      
+    - name: Run AdGuard Home tests
+      id: adguard
+      run: docker exec dns-stack-test /test_adguard.sh
+
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "Test Results Summary:"
+        echo "===================="
+        echo "Unbound DNS: ${{ steps.unbound.outcome }}"
+        echo "Redis: ${{ steps.redis.outcome }}"
+        echo "AdGuard Home: ${{ steps.adguard.outcome }}"
+
+    - name: Clean up
+      if: always()
+      run: |
+        docker stop dns-stack-test || true
+        docker rm dns-stack-test || true
+
+  notify:
+    needs: build-and-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Notify on failure
+      if: needs.build-and-test.result == 'failure'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Test failure on branch ' + context.ref.split('/').pop(),
+            body: 'Tests failed on commit ' + context.sha + '. Please check the [workflow run](' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details.'
+          })
