@@ -50,11 +50,13 @@ RUN apk update && \
         hiredis \
     && rm -rf /var/cache/apk/*
 
-# Create all necessary directories
+# Create all necessary directories with proper permissions
 RUN mkdir -p /usr/local/etc/unbound && \
     mkdir -p /opt/adguardhome/work && \
     mkdir -p /config && \
-    chown -R unbound:unbound /usr/local/etc/unbound
+    mkdir -p /run/unbound && \
+    chown -R unbound:unbound /usr/local/etc/unbound /run/unbound && \
+    chmod 755 /opt/adguardhome/work
 
 COPY config/ /config_default
 COPY init-config.sh /usr/local/bin/init-config.sh
@@ -65,6 +67,8 @@ ENV PATH="/opt/AdGuardHome:${PATH}"
 COPY --from=builder /usr/local/sbin/unbound /usr/local/sbin/unbound
 COPY --from=builder /usr/lib/libhiredis.so.1.1.0 /usr/lib/libhiredis.so.1.1.0
 COPY --from=builder /opt/AdGuardHome /opt/AdGuardHome
+RUN chmod +x /opt/AdGuardHome/AdGuardHome && \
+    chown -R root:root /opt/AdGuardHome
 
 # Run initialization to ensure configs are in place
 RUN /usr/local/bin/init-config.sh && \
