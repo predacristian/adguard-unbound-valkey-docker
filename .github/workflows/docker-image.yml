@@ -12,21 +12,6 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'Dockerfile'
-      - 'config/**'
-      - 'entrypoint.sh'
-      - 'init-config.sh'
-      - '.github/workflows/docker-image.yml'
-      - '!README.md'
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [ "main" ]
-    paths:
-      - 'Dockerfile'
-      - 'config/**'
-      - 'entrypoint.sh'
-      - 'init-config.sh'
-      - '.github/workflows/docker-image.yml'
       - '!README.md'
 
 concurrency:
@@ -35,7 +20,6 @@ concurrency:
 
 jobs:
   check-changes:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     outputs:
       files_changed: ${{ steps.check_files.outputs.changed }}
@@ -171,7 +155,6 @@ jobs:
         push: true
         tags: |
           ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest
-          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.version_tag }}
           ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.build_tag }}
         build-args: |
           UNBOUND_VERSION=${{ needs.check-versions.outputs.unbound_version }}
