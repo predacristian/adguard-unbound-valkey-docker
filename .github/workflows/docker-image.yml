@@ -14,9 +14,12 @@ on:
     paths-ignore:
       - 'README.md'
   push:
-    branches: [ "main" ]
-    paths:
-      - '!README.md'
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+  merge_group:
+    branches: [ main ]
 
 concurrency:
   group: docker-image-${{ github.run_id }}

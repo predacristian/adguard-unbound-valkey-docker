@@ -10,9 +10,10 @@ on:
   push:
     branches:
       - '**'
-      - '!main'
-    paths:
-      - '!README.md'
+    paths-ignore:
+      - 'README.md'
+  merge_group:
+    branches: [ main ]
 
 concurrency:
   group: dns-stack-tests-${{ github.run_id }}
