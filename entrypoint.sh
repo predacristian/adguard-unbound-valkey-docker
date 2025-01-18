@@ -12,7 +12,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-unbound -d -c /config/unbound/unbound.conf &
+# Updated Unbound startup
+unbound -d -c /usr/local/etc/unbound/unbound.conf
 if [ $? -ne 0 ]; then
     echo "Failed to start Unbound DNS server"
     exit 1
