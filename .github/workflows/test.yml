@@ -38,8 +38,13 @@ jobs:
         cache-to: type=gha,mode=max
 
     - name: Start test container
-      run: |        
+      run: |
+        # Set system limits on the host
+        sudo sysctl -w net.core.rmem_max=8388608
+        sudo sysctl -w net.core.wmem_max=8388608
+        
         docker run -d --name dns-stack-test \
+          --privileged \
           -p 5353:53/tcp \
           -p 5353:53/udp \
           -p 3001:3000 \
@@ -50,28 +55,34 @@ jobs:
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to initialize..."
-        sleep 30
+        sleep 45  # Increased wait time for services
         docker ps
         docker logs dns-stack-test
 
-    - name: Copy test scripts to container
+    - name: Copy and prepare test scripts
       run: |
-        docker cp ./tests/test_unbound.sh dns-stack-test:/test_unbound.sh
-        docker cp ./tests/test_redis.sh dns-stack-test:/test_redis.sh
-        docker cp ./tests/test_adguard.sh dns-stack-test:/test_adguard.sh
-        docker exec dns-stack-test chmod +x /test_*.sh
+        # Create test directory in container
+        docker exec dns-stack-test mkdir -p /tests
+        
+        # Copy test files
+        docker cp ./tests/test_unbound.sh dns-stack-test:/tests/
+        docker cp ./tests/test_redis.sh dns-stack-test:/tests/
+        docker cp ./tests/test_adguard.sh dns-stack-test:/tests/
+        
+        # Set permissions
+        docker exec dns-stack-test chmod +x /tests/test_*.sh
 
     - name: Run Unbound DNS tests
       id: unbound
-      run: docker exec dns-stack-test /test_unbound.sh
+      run: docker exec dns-stack-test /tests/test_unbound.sh
       
     - name: Run Redis tests
       id: redis
-      run: docker exec dns-stack-test /test_redis.sh
+      run: docker exec dns-stack-test /tests/test_redis.sh
       
     - name: Run AdGuard Home tests
       id: adguard
-      run: docker exec dns-stack-test /test_adguard.sh
+      run: docker exec dns-stack-test /tests/test_adguard.sh
 
     - name: Test Summary
       if: always()
