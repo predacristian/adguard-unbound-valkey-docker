@@ -2,6 +2,11 @@ name: DNS Stack Tests
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'README.md'
   push:
     branches:
       - '**'
@@ -10,7 +15,7 @@ on:
       - '!README.md'
 
 concurrency:
-  group: test-${{ github.ref }}
+  group: dns-stack-tests-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:

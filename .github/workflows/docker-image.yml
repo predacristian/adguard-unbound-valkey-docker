@@ -9,13 +9,17 @@ on:
       adguard_version:
         description: 'AdGuard version'
         required: false
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'README.md'
   push:
     branches: [ "main" ]
     paths:
       - '!README.md'
 
 concurrency:
-  group: docker-image-${{ github.ref }}
+  group: docker-image-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
