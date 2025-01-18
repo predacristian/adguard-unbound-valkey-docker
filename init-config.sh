@@ -1,6 +1,6 @@
 #!/bin/sh
 
-mkdir -p /config/redis /config/unbound /config/AdGuardHome || {
+mkdir -p /config/redis /config/unbound /config/AdGuardHome /opt/adguardhome/work || {
     echo "Failed to create directories"
     exit 1
 }
