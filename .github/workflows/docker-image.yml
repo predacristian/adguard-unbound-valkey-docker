@@ -9,12 +9,7 @@ on:
       adguard_version:
         description: 'AdGuard version'
         required: false
-
-  schedule:
-    - cron: '0 0 * * *'  # Run daily
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
 
 jobs:
