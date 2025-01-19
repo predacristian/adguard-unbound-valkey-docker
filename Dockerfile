@@ -77,10 +77,6 @@ RUN /usr/local/bin/init-config.sh && \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 755 /usr/local/bin/entrypoint.sh
 
-# Optional non-root user for better security:
-# RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-# USER appuser
-
 EXPOSE 53/tcp 53/udp 853/tcp 3000/tcp 443/tcp
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
