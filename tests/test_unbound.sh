@@ -7,20 +7,23 @@ echo "Running DNS resolution test..."
 # Function to check Unbound process
 check_unbound_process() {
     echo "Checking Unbound process..."
-    ps aux | grep unbound || echo "Unbound process not found"
+    if ! pgrep -x "unbound" > /dev/null; then
+        echo "Unbound process not found"
+    fi
 }
 
 # Function to check DNS ports
 check_dns_ports() {
     echo "Checking DNS ports status..."
-    netstat -tuln | grep -E ':5335'
+    if ! netstat -tuln | grep -q ':5335'; then
+        echo "DNS port 5335 not open"
+    fi
 }
 
 # Function to test DNS resolution with retries
 test_dns_resolution() {
     local dns_working=false
-    local i=1
-    while [ $i -le 3 ]; do
+    for i in 1 2 3; do
         dig_output=$(dig +short @127.0.0.1 -p 5335 google.com)
         if [ -n "$dig_output" ]; then
             dns_working=true
@@ -29,7 +32,6 @@ test_dns_resolution() {
         fi
         echo "DNS resolution attempt $i failed, retrying..."
         echo "dig output: $dig_output"
-        i=$((i + 1))
         sleep 2
     done
 

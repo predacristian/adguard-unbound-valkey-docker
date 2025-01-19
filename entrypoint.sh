@@ -1,26 +1,20 @@
 #!/bin/sh
 
+set -e
+
+# Initialize configuration
 /usr/local/bin/init-config.sh
-if [ $? -ne 0 ]; then
-    echo "Failed to initialize configuration"
-    exit 1
-fi
 
+# Start Redis server
 redis-server /config/redis/redis.conf --daemonize yes
-if [ $? -ne 0 ]; then
-    echo "Failed to start Redis server"
-    exit 1
-fi
 
-unbound -d &
-if [ $? -ne 0 ]; then
-    echo "Failed to start Unbound DNS server"
-    exit 1
-fi
+# Start Unbound DNS server
+unbound -c /usr/local/etc/unbound/unbound.conf -d &
 
-# Wait for unbound to be ready
+# Wait for Unbound to be ready
 sleep 2
 
+# Start AdGuard Home
 cd /opt/AdGuardHome
 ./AdGuardHome \
     --no-check-update \
@@ -30,7 +24,7 @@ cd /opt/AdGuardHome
     --port 3000 \
     --pidfile /opt/adguardhome/adguard.pid &
 
-# Wait for AdGuard to start
+# Wait for AdGuard Home to start
 sleep 2
 
 # Keep container running
