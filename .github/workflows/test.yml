@@ -1,4 +1,4 @@
-name: DNS Stack Tests
+name: 1. DNS Stack Tests
 
 on:
   workflow_dispatch:
@@ -7,19 +7,27 @@ on:
       - '**'
     paths-ignore:
       - 'README.md'
+    types: [opened, synchronize, reopened]
   push:
     branches:
-      - '**'
-      - '!main'
-    paths:
-      - '!README.md'
+      - main
+    paths-ignore:
+      - 'README.md'
+  merge_group:
+    branches: [ main ]
 
 concurrency:
-  group: dns-stack-tests-${{ github.run_id }}
+  group: dns-stack-tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-and-test:
+    # Add condition to prevent duplicate runs
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     
     strategy:

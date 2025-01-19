@@ -1,4 +1,4 @@
-name: DNS Stack CI/CD
+name: 2. DNS Stack CI/CD
 
 on:
   workflow_dispatch:
@@ -14,16 +14,39 @@ on:
     paths-ignore:
       - 'README.md'
   push:
-    branches: [ "main" ]
-    paths:
-      - '!README.md'
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+  merge_group:
+    branches: [ main ]
 
 concurrency:
   group: docker-image-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  wait-for-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for tests
+        id: wait-for-tests
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: build-and-test
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          timeoutSeconds: 300
+          intervalSeconds: 10
+    
+      - name: Check test results
+        if: steps.wait-for-tests.outputs.conclusion == 'failure'
+        run: |
+          echo "Tests failed!"
+          exit 1
+
   check-changes:
+    needs: [wait-for-tests]
     runs-on: ubuntu-latest
     outputs:
       files_changed: ${{ steps.check_files.outputs.changed }}
@@ -46,6 +69,7 @@ jobs:
         fi
 
   check-versions:
+    needs: [wait-for-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,10 +144,10 @@ jobs:
         fi
 
   build:
-    needs: [check-versions, check-changes]
+    needs: [wait-for-tests, check-versions, check-changes]
     if: >
       (needs.check-versions.outputs.build_needed == 'true' || needs.check-changes.outputs.files_changed == 'true')
-      && github.event_name == 'push'
+      && (github.event_name == 'push' || github.event_name == 'pull_request')
       && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
