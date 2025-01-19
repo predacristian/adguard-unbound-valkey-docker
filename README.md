@@ -61,4 +61,3 @@ docker run -d \
   -v /path/to/config:/config \
   cpreda/dns-stack:latest
 ```
-   
