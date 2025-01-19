@@ -7,27 +7,29 @@ echo "Running Redis server test..."
 # Function to check Redis process
 check_redis_process() {
     echo "Checking Redis process..."
-    ps aux | grep redis-server || echo "Redis process not found"
+    if ! pgrep -x "redis-server" > /dev/null; then
+        echo "Redis process not found"
+    fi
 }
 
 # Function to check Redis port
 check_redis_port() {
     echo "Checking Redis port status..."
-    netstat -tuln | grep -E ':6379'
+    if ! netstat -tuln | grep -q ':6379'; then
+        echo "Redis port 6379 not open"
+    fi
 }
 
 # Function to test Redis connection with retries
 test_redis_connection() {
     local redis_connected=false
-    local i=1
-    while [ $i -le 3 ]; do
+    for i in 1 2 3; do
         if redis-cli -p 6379 ping | grep -q 'PONG'; then
             redis_connected=true
             echo "Redis connection successful"
             break
         fi
         echo "Redis connection attempt $i failed, retrying..."
-        i=$((i + 1))
         sleep 2
     done
 
@@ -70,7 +72,12 @@ test_redis_operations() {
 # Function to test Redis performance
 test_redis_performance() {
     echo "Testing Redis performance..."
-    redis-cli -p 6379 ping | grep -q 'PONG' && echo "Response time test passed"
+    if redis-cli -p 6379 ping | grep -q 'PONG'; then
+        echo "Response time test passed"
+    else
+        echo "Response time test failed"
+        exit 1
+    fi
 }
 
 # Show diagnostic information
