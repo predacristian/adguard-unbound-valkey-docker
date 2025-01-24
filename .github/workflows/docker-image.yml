@@ -1,158 +1,78 @@
-name: 2. DNS Stack CI/CD
+name: 2. DNS Stack Build & Test
 
 on:
   workflow_dispatch:
-    inputs:
-      unbound_version:
-        description: 'Unbound version'
-        required: false
-      adguard_version:
-        description: 'AdGuard version'
-        required: false
   pull_request:
     branches: [ "main" ]
-    paths-ignore:
-      - 'README.md'
   push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
+    branches: [ "main" ]
   merge_group:
     branches: [ main ]
 
 concurrency:
-  group: docker-image-${{ github.run_id }}
+  group: docker-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  wait-for-tests:
+  build-and-test:
     runs-on: ubuntu-latest
-    steps:
-      - name: Wait for tests
-        id: wait-for-tests
-        uses: fountainhead/action-wait-for-check@v1.1.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          checkName: build-and-test
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          timeoutSeconds: 300
-          intervalSeconds: 10
-    
-      - name: Check test results
-        if: steps.wait-for-tests.outputs.conclusion == 'failure'
-        run: |
-          echo "Tests failed!"
-          exit 1
-
-  check-changes:
-    needs: [wait-for-tests]
-    runs-on: ubuntu-latest
-    outputs:
-      files_changed: ${{ steps.check_files.outputs.changed }}
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build for testing
+      uses: docker/build-push-action@v5
       with:
-        fetch-depth: 2
-    
-    - name: Check for relevant file changes
-      id: check_files
-      run: |
-        git diff --name-only HEAD^ HEAD > changed_files.txt
-        echo "Changed files:"
-        cat changed_files.txt
-        
-        if grep -qE '^(Dockerfile|config/|entrypoint\.sh|init-config\.sh)' changed_files.txt; then
-          echo "changed=true" >> $GITHUB_OUTPUT
-        else
-          echo "changed=false" >> $GITHUB_OUTPUT
-        fi
+        context: .
+        load: true
+        tags: dns-stack:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-  check-versions:
-    needs: [wait-for-tests]
+    - name: Set test scripts permissions
+      run: |
+        chmod +x tests/test_unbound.sh
+        chmod +x tests/test_redis.sh
+        chmod +x tests/test_adguard.sh
+        ls -la tests/
+
+    - name: Start test container
+      run: |
+        docker run -d --name dns-stack-test \
+          -v ${{ github.workspace }}/tests:/tests:ro \
+          dns-stack:test
+        
+        # Verify the mount
+        echo "Verifying test files mount..."
+        docker exec dns-stack-test ls -la /tests || {
+          echo "Failed to list /tests directory"
+          docker logs dns-stack-test
+          exit 1
+        }
+        
+        sleep 25  # Wait for services to start
+
+    - name: Run tests
+      run: |
+        for test in unbound redis adguard; do
+          echo "Running $test tests..."
+          if ! docker exec dns-stack-test /tests/test_${test}.sh; then
+            echo "Test $test failed"
+            docker logs dns-stack-test
+            exit 1
+          fi
+        done
+
+    - name: Clean up
+      if: always()
+      run: docker rm -f dns-stack-test || true
+
+  publish:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      unbound_version: ${{ env.UNBOUND_VERSION }}
-      adguard_version: ${{ env.ADGUARD_VERSION }}
-      build_needed: ${{ steps.check.outputs.build_needed }}
-
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Get Latest Versions
-      id: versions
-      run: |
-        if [ -n "${{ github.event.inputs.unbound_version }}" ]; then
-          UNBOUND_VERSION="${{ github.event.inputs.unbound_version }}"
-        else
-          UNBOUND_VERSION=$(curl -s https://nlnetlabs.nl/downloads/unbound/ | grep -oP 'unbound-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.tar\.gz)' | sort -V | tail -n1)
-        fi
-
-        if [ -n "${{ github.event.inputs.adguard_version }}" ]; then
-          ADGUARD_VERSION="${{ github.event.inputs.adguard_version }}"
-        else
-          ADGUARD_VERSION=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | jq -r .tag_name)
-        fi
-        
-        echo "unbound_version=${UNBOUND_VERSION}" >> $GITHUB_OUTPUT
-        echo "adguard_version=${ADGUARD_VERSION}" >> $GITHUB_OUTPUT
-        echo "UNBOUND_VERSION=${UNBOUND_VERSION}" >> $GITHUB_ENV
-        echo "ADGUARD_VERSION=${ADGUARD_VERSION}" >> $GITHUB_ENV
-
-    - name: Update Dockerfile Versions
-      id: version_check
-      run: |
-        CURRENT_UNBOUND=$(grep "ARG UNBOUND_VERSION=" Dockerfile | cut -d'"' -f2)
-        CURRENT_ADGUARD=$(grep "ARG ADGUARD_VERSION=" Dockerfile | cut -d'"' -f2)
-        
-        echo "CURRENT_UNBOUND=${CURRENT_UNBOUND}"
-        echo "CURRENT_ADGUARD=${CURRENT_ADGUARD}"
-        echo "New versions:"
-        echo "UNBOUND_VERSION=${UNBOUND_VERSION}"
-        echo "ADGUARD_VERSION=${ADGUARD_VERSION}"
-        
-        if [ "${CURRENT_UNBOUND}" = "${UNBOUND_VERSION}" ] && [ "${CURRENT_ADGUARD}" = "${ADGUARD_VERSION}" ]; then
-          echo "versions_current=true" >> $GITHUB_OUTPUT
-          echo "No updates needed, versions are current"
-          exit 0
-        fi
-        
-        sed -i.bak "s|ARG UNBOUND_VERSION=.*|ARG UNBOUND_VERSION=\"${UNBOUND_VERSION}\"|" Dockerfile
-        sed -i.bak "s|ARG ADGUARD_VERSION=.*|ARG ADGUARD_VERSION=\"${ADGUARD_VERSION}\"|" Dockerfile
-        rm -f Dockerfile.bak
-        echo "versions_current=false" >> $GITHUB_OUTPUT
-        echo "DOCKERFILE_UPDATED=true" >> $GITHUB_ENV
-
-    - name: Commit and push if changed
-      if: steps.version_check.outputs.versions_current == 'false'
-      run: |
-        git config --global user.name 'GitHub Actions Bot'
-        git config --global user.email 'actions@github.com'
-        git add Dockerfile
-        git commit -m "chore: update Unbound to ${UNBOUND_VERSION} and AdGuard to ${ADGUARD_VERSION}"
-        git push origin main
-
-    - name: Set build needed flag
-      id: check
-      run: |
-        if [ "${{ steps.version_check.outputs.versions_current }}" = "true" ]; then
-          echo "build_needed=false" >> $GITHUB_OUTPUT
-        else
-          echo "build_needed=true" >> $GITHUB_OUTPUT
-        fi
-
-  build:
-    needs: [wait-for-tests, check-versions, check-changes]
-    if: >
-      (needs.check-versions.outputs.build_needed == 'true' || needs.check-changes.outputs.files_changed == 'true')
-      && (github.event_name == 'push' || github.event_name == 'pull_request')
-      && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
     steps:
     - uses: actions/checkout@v4
     
@@ -168,12 +88,13 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     
-    - name: Generate unique tag
+    - name: Generate tags
       id: tags
       run: |
+        UNBOUND_VERSION=$(grep "ARG UNBOUND_VERSION=" Dockerfile | cut -d'"' -f2)
+        ADGUARD_VERSION=$(grep "ARG ADGUARD_VERSION=" Dockerfile | cut -d'"' -f2)
         SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-        VERSION_TAG="u${{ needs.check-versions.outputs.unbound_version }}-a${{ needs.check-versions.outputs.adguard_version }}"
-        echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
+        VERSION_TAG="u${UNBOUND_VERSION}-a${ADGUARD_VERSION}"
         echo "build_tag=${VERSION_TAG}-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
     - name: Build and push
@@ -185,6 +106,5 @@ jobs:
         tags: |
           ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest
           ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.build_tag }}
-        build-args: |
-          UNBOUND_VERSION=${{ needs.check-versions.outputs.unbound_version }}
-          ADGUARD_VERSION=${{ needs.check-versions.outputs.adguard_version }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
