@@ -2,7 +2,7 @@
 FROM alpine:latest AS builder
 
 ARG UNBOUND_VERSION="1.22.0"
-ARG ADGUARD_VERSION="v0.107.55"
+ARG ADGUARD_VERSION="v0.107.57"
 
 # Install build dependencies
 RUN apk update && \
