@@ -5,8 +5,8 @@ set -e
 # Initialize configuration
 /usr/local/bin/init-config.sh
 
-# Start Redis server
-redis-server /config/redis/redis.conf --daemonize yes
+# Start Valkey server
+valkey-server /config/valkey/valkey.conf --daemonize yes
 
 # Start Unbound DNS server
 unbound -c /usr/local/etc/unbound/unbound.conf -d &
