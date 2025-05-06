@@ -3,13 +3,13 @@
 set -e
 
 # Create necessary directories
-mkdir -p /config/redis /config/unbound /config/AdGuardHome /opt/adguardhome/work /usr/local/etc/unbound /run/unbound
+mkdir -p /config/valkey /config/unbound /config/AdGuardHome /opt/adguardhome/work /usr/local/etc/unbound /run/unbound
 chown -R unbound:unbound /usr/local/etc/unbound /run/unbound
 chmod 755 /opt/adguardhome/work
 
-# Copy Redis configuration if not present
-if [ -z "$(ls -A /config/redis)" ]; then
-    cp -r /config_default/redis/* /config/redis/
+# Copy Valkey configuration if not present
+if [ -z "$(ls -A /config/valkey)" ]; then
+    cp -r /config_default/valkey/* /config/valkey/
 fi
 
 # Copy Unbound configuration if not present

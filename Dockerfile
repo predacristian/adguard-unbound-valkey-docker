@@ -1,8 +1,8 @@
 # Stage 1: builder
 FROM alpine:latest AS builder
 
-ARG UNBOUND_VERSION="1.22.0"
-ARG ADGUARD_VERSION="v0.107.57"
+ARG UNBOUND_VERSION="1.23.0"
+ARG ADGUARD_VERSION="v0.107.61"
 
 # Install build dependencies
 RUN apk update && \
@@ -47,10 +47,11 @@ RUN apk update && \
     apk add --no-cache \
         busybox-suid \
         curl \
-        redis \
+        valkey \
+        valkey-cli \
+        valkey-compat \
         unbound \
-        bind-tools \
-        hiredis
+        bind-tools
 
 # Copy default configurations
 COPY config/ /config_default

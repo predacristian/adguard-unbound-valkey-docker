@@ -76,16 +76,16 @@ jobs:
     - name: Set permissions on test scripts
       run: |
         chmod +x ./tests/test_unbound.sh
-        chmod +x ./tests/test_redis.sh
+        chmod +x ./tests/test_valkey.sh
         chmod +x ./tests/test_adguard.sh
 
     - name: Run Unbound DNS tests
       id: unbound
       run: docker exec dns-stack-test /tests/test_unbound.sh
       
-    - name: Run Redis tests
-      id: redis
-      run: docker exec dns-stack-test /tests/test_redis.sh
+    - name: Run Valkey tests
+      id: valkey
+      run: docker exec dns-stack-test /tests/test_valkey.sh
       
     - name: Run AdGuard Home tests
       id: adguard
@@ -97,7 +97,7 @@ jobs:
         echo "Test Results Summary:"
         echo "===================="
         echo "Unbound DNS: ${{ steps.unbound.outcome }}"
-        echo "Redis: ${{ steps.redis.outcome }}"
+        echo "Valkey: ${{ steps.valkey.outcome }}"
         echo "AdGuard Home: ${{ steps.adguard.outcome }}"
 
     - name: Clean up

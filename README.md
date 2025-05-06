@@ -1,17 +1,17 @@
 # DNS Stack
 
-A containerized DNS solution combining Unbound DNS, AdGuard Home, and Redis for efficient DNS resolution and ad blocking.
+A containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution and ad blocking.
 
 ## Components
 
 - **Unbound DNS**: A validating, recursive, and caching DNS resolver
 - **AdGuard Home**: Network-wide ads & tracking blocking DNS server
-- **Redis**: In-memory cache for Unbound DNS
+- **Valkey**: Lightweight in-memory cache for Unbound DNS (Alpine package version)
 
 ## Features
 
 - DNS over TLS (DoT) support
-- DNS caching with Redis backend
+- DNS caching with Valkey backend
 - Ad blocking and custom filtering through AdGuard Home
 - Configurable upstream DNS providers
 - Container-optimized configuration
@@ -31,15 +31,15 @@ AdGuard Home web interface:
   - Username: `admin`
   - Password: `admin`
 
-**Important**: Change the default password after first login for security or bring your own config.
+**Important** ⚠️: Change the default password after first login for security or bring your own config.
 
-## Configuration
+## Configuration ⚙️
 
 The container uses three main configuration directories:
 
 - `/config/unbound/`: Unbound DNS configuration
 - `/config/AdGuardHome/`: AdGuard Home configuration
-- `/config/redis/`: Redis cache configuration
+- `/config/valkey/`: Valkey cache configuration
 
 Default configurations are provided and copied to these locations on first run.
 
@@ -49,7 +49,15 @@ The container uses the following build arguments:
 - `UNBOUND_VERSION`: Version of Unbound DNS to install
 - `ADGUARD_VERSION`: Version of AdGuard Home to install
 
-## Docker Usage
+## Building the Docker Image 🛠️
+
+To build the Docker image locally, use the following command:
+
+```bash
+docker build -t dns-stack .
+```
+
+## Docker Usage 🐳
 
 ```bash
 docker run -d \
@@ -59,5 +67,5 @@ docker run -d \
   -p 853:853/tcp \
   -p 3000:3000/tcp \
   -v /path/to/config:/config \
-  cpreda/dns-stack:latest
+  dns-stack
 ```
