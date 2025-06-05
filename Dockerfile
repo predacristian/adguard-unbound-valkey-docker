@@ -2,7 +2,7 @@
 FROM alpine:latest AS builder
 
 ARG UNBOUND_VERSION="1.23.0"
-ARG ADGUARD_VERSION="v0.107.61"
+ARG ADGUARD_VERSION="v0.107.62"
 
 # Install build dependencies
 RUN apk update && \
@@ -63,7 +63,6 @@ ENV PATH="/opt/AdGuardHome:${PATH}"
 
 # Copy built binaries and AdGuard Home
 COPY --from=builder /usr/local/sbin/unbound /usr/local/sbin/unbound
-COPY --from=builder /usr/lib/libhiredis.so.1.1.0 /usr/lib/libhiredis.so.1.1.0
 COPY --from=builder /opt/AdGuardHome /opt/AdGuardHome
 RUN chmod +x /opt/AdGuardHome/AdGuardHome && \
     chown -R root:root /opt/AdGuardHome
