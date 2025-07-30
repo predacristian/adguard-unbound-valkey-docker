@@ -95,21 +95,17 @@ validate_configs() {
 init_configuration() {
     log "Initializing configs..."
     
-    # Create necessary directories
     mkdir -p /config/valkey /config/unbound /config/AdGuardHome \
              /opt/adguardhome/work /usr/local/etc/unbound /run/unbound
     
-    # Create unbound user if it doesn't exist
     if ! id unbound >/dev/null 2>&1; then
         addgroup -S unbound
         adduser -S -G unbound unbound
     fi
     
-    # Set proper ownership and permissions
     chown -R unbound:unbound /usr/local/etc/unbound /run/unbound
     chmod 755 /opt/adguardhome/work
     
-    # Copy default configurations if not present
     for service in valkey unbound AdGuardHome; do
         if [ -z "$(ls -A /config/$service 2>/dev/null)" ]; then
             log "Copying default $service config..."
@@ -125,17 +121,14 @@ init_configuration() {
         fi
     done
     
-    # Verify source file exists before creating symbolic link
     if [ ! -f "/config/unbound/unbound.conf" ]; then
         log_error "Source Unbound config /config/unbound/unbound.conf not found"
         return 1
     fi
     
-    # Create symbolic link for Unbound config
     log "Linking Unbound config..."
     ln -sf /config/unbound/unbound.conf /usr/local/etc/unbound/unbound.conf
     
-    # Verify symbolic link was created successfully
     if [ ! -L "/usr/local/etc/unbound/unbound.conf" ]; then
         log_error "Failed to link Unbound config"
         return 1
@@ -159,11 +152,9 @@ start_valkey() {
 start_unbound() {
     log "Starting Unbound..."
     
-    # Start Unbound in background
     unbound -c /usr/local/etc/unbound/unbound.conf -d &
     UNBOUND_PID=$!
     
-    # Wait for Unbound to be ready
     wait_for_service "Unbound" "dig @127.0.0.1 -p 5335 +short google.com"
 }
 
@@ -181,20 +172,16 @@ start_adguard() {
     
     ADGUARD_PID=$!
     
-    # Wait for AdGuard Home to be ready
     wait_for_service "AdGuard Home" "curl -s http://127.0.0.1:3000 >/dev/null"
 }
 
 main() {
     log "Starting DNS Stack..."
     
-    # Initialize configuration
     init_configuration || exit 1
     
-    # Validate configurations
     validate_configs || exit 1
     
-    # Start services in order
     start_valkey || exit 1
     start_unbound || exit 1
     start_adguard || exit 1
@@ -203,9 +190,7 @@ main() {
     log "AdGuard Home: http://localhost:3000"
     log "Default credentials: admin/admin"
     
-    # Keep container running and wait for signals
     while true; do
-        # Check if critical services are still running
         if ! kill -0 $UNBOUND_PID 2>/dev/null; then
             log_error "Unbound died, restarting..."
             exit 1

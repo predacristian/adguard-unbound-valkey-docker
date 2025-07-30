@@ -49,7 +49,7 @@ check_ports() {
 
 check_process() {
     log "Checking AdGuard Home process..."
-    if ! pgrep -x "$ADGUARD_PROCESS" >/dev/null; then
+    if ! pgrep "$ADGUARD_PROCESS" >/dev/null; then
         log_error "AdGuard Home process not found"
         exit 1
     fi

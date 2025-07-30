@@ -44,7 +44,7 @@ check_binaries() {
 
 check_unbound_process() {
     log "Checking Unbound process..."
-    if ! pgrep -x "$UNBOUND_PROCESS" >/dev/null; then
+    if ! pgrep "$UNBOUND_PROCESS" >/dev/null; then
         log_error "Unbound process not found"
         exit 1
     fi
