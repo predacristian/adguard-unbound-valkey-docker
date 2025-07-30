@@ -2,101 +2,133 @@
 
 set -e
 
-echo "Running DNS resolution test..."
+# Default parameters
+UNBOUND_PORT="5335"
+UNBOUND_PROCESS="unbound"
+UNBOUND_HOST="127.0.0.1"
+SLEEP_SECONDS="2"
+MAX_ATTEMPTS="3"
 
-# Function to check Unbound process
-check_unbound_process() {
-    echo "Checking Unbound process..."
-    if ! pgrep -x "unbound" > /dev/null; then
-        echo "Unbound process not found"
-    fi
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Function to check DNS ports
-check_dns_ports() {
-    echo "Checking DNS ports status..."
-    if ! netstat -tuln | grep -q ':5335'; then
-        echo "DNS port 5335 not open"
-    fi
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
 }
 
-# Function to test DNS resolution with retries
-test_dns_resolution() {
-    local dns_working=false
-    for i in 1 2 3; do
-        dig_output=$(dig +short @127.0.0.1 -p 5335 google.com)
-        if [ -n "$dig_output" ]; then
-            dns_working=true
-            echo "Basic DNS resolution working"
-            break
+retry() {
+    cmd="$1"
+    max_attempts="${2:-$MAX_ATTEMPTS}"
+    sleep_seconds="${3:-$SLEEP_SECONDS}"
+    attempt=1
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if eval "$cmd"; then
+            return 0
         fi
-        echo "DNS resolution attempt $i failed, retrying..."
-        echo "dig output: $dig_output"
-        sleep 2
+        log "Attempt $attempt failed, retrying..."
+        sleep "$sleep_seconds"
+        attempt=$((attempt + 1))
     done
+    return 1
+}
 
-    if [ "$dns_working" != "true" ]; then
-        echo "Basic DNS resolution test failed"
+check_binaries() {
+    for bin in dig pgrep grep; do
+        if ! command -v "$bin" >/dev/null 2>&1; then
+            log_error "Required binary '$bin' not found"
+            exit 1
+        fi
+    done
+}
+
+check_unbound_process() {
+    log "Checking Unbound process..."
+    if ! pgrep -x "$UNBOUND_PROCESS" >/dev/null; then
+        log_error "Unbound process not found"
         exit 1
     fi
+    log "Unbound process is running"
 }
 
-# Function to test DNSSEC validation
-test_dnssec_validation() {
-    echo "Testing DNSSEC validation..."
+check_unbound_port() {
+    log "Checking Unbound port status..."
+    if command -v ss >/dev/null 2>&1; then
+        port_check_cmd="ss -tuln | grep -qE ':${UNBOUND_PORT}'"
+    else
+        port_check_cmd="netstat -tuln | grep -qE ':${UNBOUND_PORT}'"
+    fi
+    if ! eval "$port_check_cmd"; then
+        log_error "Unbound port ${UNBOUND_PORT} not open"
+        exit 1
+    fi
+    log "Unbound port ${UNBOUND_PORT} is open"
+}
 
-    # Test valid DNSSEC
-    echo "Testing valid DNSSEC domain (dnssec.works)..."
-    dig_output=$(dig @127.0.0.1 -p 5335 dnssec.works)
+test_dns_resolution() {
+    log "Testing basic DNS resolution..."
+    retry "dig_output=\$(dig +short @${UNBOUND_HOST} -p ${UNBOUND_PORT} google.com); [ -n \"\$dig_output\" ]" "$MAX_ATTEMPTS" "$SLEEP_SECONDS"
+    if [ $? -ne 0 ]; then
+        log_error "Basic DNS resolution test failed"
+        exit 1
+    fi
+    log "Basic DNS resolution working"
+}
+
+test_dnssec_validation() {
+    log "Testing DNSSEC validation..."
+    log "Testing valid DNSSEC domain (dnssec.works)..."
+    dig_output=$(dig @${UNBOUND_HOST} -p ${UNBOUND_PORT} dnssec.works)
     echo "$dig_output"
     if ! echo "$dig_output" | grep -q 'status: NOERROR'; then
-        echo "Valid DNSSEC test failed"
+        log_error "Valid DNSSEC test failed"
         exit 1
     fi
-
-    # Test invalid DNSSEC
-    echo "Testing invalid DNSSEC domain (fail01.dnssec.works)..."
-    dig_output=$(dig @127.0.0.1 -p 5335 fail01.dnssec.works)
+    log "Testing invalid DNSSEC domain (fail01.dnssec.works)..."
+    dig_output=$(dig @${UNBOUND_HOST} -p ${UNBOUND_PORT} fail01.dnssec.works)
     echo "$dig_output"
     if ! echo "$dig_output" | grep -q 'status: SERVFAIL'; then
-        echo "Invalid DNSSEC test failed"
+        log_error "Invalid DNSSEC test failed"
         exit 1
     fi
+    log "DNSSEC validation tests passed"
 }
 
-# Function to test reverse DNS
 test_reverse_dns() {
-    echo "Testing reverse DNS..."
-    dig_output=$(dig @127.0.0.1 -p 5335 -x 8.8.8.8)
+    log "Testing reverse DNS..."
+    dig_output=$(dig @${UNBOUND_HOST} -p ${UNBOUND_PORT} -x 8.8.8.8)
     echo "$dig_output"
-    if ! echo "$dig_output" | grep -q 'dns.google'; then
-        echo "Reverse DNS test failed"
+    if ! echo "$dig_output" | grep -qE 'PTR.*dns.google'; then
+        log_error "Reverse DNS test failed"
         exit 1
     fi
+    log "Reverse DNS test passed"
 }
 
-# Function to test DNS response time
 test_dns_response_time() {
-    echo "Testing DNS response time..."
+    log "Testing DNS response time..."
     start_time=$(date +%s%N)
-    dig @127.0.0.1 -p 5335 +short google.com > /dev/null
+    dig @${UNBOUND_HOST} -p ${UNBOUND_PORT} +short google.com > /dev/null
     end_time=$(date +%s%N)
     duration=$((($end_time - $start_time)/1000000))
-    echo "Response time: ${duration}ms"
-
+    log "Response time: ${duration}ms"
     if [ $duration -gt 1000 ]; then
-        echo "Warning: DNS response time is high (${duration}ms)"
+        log_error "DNS response time is high (${duration}ms)"
+        exit 1
     fi
+    log "DNS response time is acceptable"
 }
 
-# Show diagnostic information
-check_unbound_process
-check_dns_ports
+main() {
+    log "Running Unbound DNS server test..."
+    check_binaries
+    check_unbound_process
+    check_unbound_port
+    test_dns_resolution
+    test_dnssec_validation
+    test_reverse_dns
+    test_dns_response_time
+    log "All DNS tests completed successfully"
+}
 
-# Run tests
-test_dns_resolution
-test_dnssec_validation
-test_reverse_dns
-test_dns_response_time
-
-echo "All DNS tests completed successfully"
+main "$@"
