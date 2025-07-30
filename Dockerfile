@@ -1,8 +1,9 @@
 # Stage 1: builder
 FROM alpine:latest AS builder
 
-ARG UNBOUND_VERSION="1.23.0"
-ARG ADGUARD_VERSION="v0.107.61"
+ARG UNBOUND_VERSION="1.23.1"
+ARG ADGUARD_VERSION="v0.107.64"
+ARG VALKEY_VERSION="8.1.3"
 
 # Install build dependencies
 RUN apk update && \
@@ -14,7 +15,8 @@ RUN apk update && \
         libcap-dev \
         libevent-dev \
         wget \
-        perl
+        perl \
+        git
 
 # Build Unbound
 RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz && \
@@ -34,6 +36,13 @@ RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.g
         make install) && \
     rm -rf unbound-latest* /var/cache/apk/*
 
+# Build Valkey
+RUN git clone --branch ${VALKEY_VERSION} --depth 1 https://github.com/valkey-io/valkey.git /tmp/valkey && \
+    cd /tmp/valkey && \
+    make BUILD_TLS=yes && \
+    make install && \
+    rm -rf /tmp/valkey
+
 # Download AdGuard Home
 RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
     tar -xzf /tmp/AdGuardHome.tar.gz -C /opt && \
@@ -47,11 +56,11 @@ RUN apk update && \
     apk add --no-cache \
         busybox-suid \
         curl \
-        valkey \
-        valkey-cli \
-        valkey-compat \
         unbound \
         bind-tools
+
+# Ensure Valkey data directory exists
+RUN mkdir -p /var/lib/valkey
 
 # Copy default configurations
 COPY config/ /config_default
@@ -63,10 +72,16 @@ ENV PATH="/opt/AdGuardHome:${PATH}"
 
 # Copy built binaries and AdGuard Home
 COPY --from=builder /usr/local/sbin/unbound /usr/local/sbin/unbound
-COPY --from=builder /usr/lib/libhiredis.so.1.1.0 /usr/lib/libhiredis.so.1.1.0
 COPY --from=builder /opt/AdGuardHome /opt/AdGuardHome
 RUN chmod +x /opt/AdGuardHome/AdGuardHome && \
     chown -R root:root /opt/AdGuardHome
+
+# Copy Valkey binaries
+COPY --from=builder /usr/local/bin/valkey-server /usr/local/bin/valkey-server
+COPY --from=builder /usr/local/bin/valkey-cli /usr/local/bin/valkey-cli
+COPY --from=builder /usr/local/bin/valkey-benchmark /usr/local/bin/valkey-benchmark
+COPY --from=builder /usr/local/bin/valkey-check-rdb /usr/local/bin/valkey-check-rdb
+COPY --from=builder /usr/local/bin/valkey-sentinel /usr/local/bin/valkey-sentinel
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
