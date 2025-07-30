@@ -1,10 +1,10 @@
 # Stage 1: builder
-FROM alpine:latest AS builder
+FROM alpine:3.22.1 AS builder
 
-ARG UNBOUND_VERSION="1.23.0"
-ARG ADGUARD_VERSION="v0.107.61"
+ARG UNBOUND_VERSION="1.23.1"
+ARG ADGUARD_VERSION="v0.107.64"
+ARG VALKEY_VERSION="8.1.3"
 
-# Install build dependencies
 RUN apk update && \
     apk add --no-cache \
         build-base \
@@ -14,10 +14,14 @@ RUN apk update && \
         libcap-dev \
         libevent-dev \
         wget \
-        perl
+        perl \
+        git \
+        coreutils
 
-# Build Unbound
 RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz && \
+    wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz.sha256 && \
+    echo "$(cat unbound-${UNBOUND_VERSION}.tar.gz.sha256)  unbound-${UNBOUND_VERSION}.tar.gz" > unbound-checksum && \
+    sha256sum -c unbound-checksum && \
     mkdir unbound-latest && \
     tar -xzf unbound-${UNBOUND_VERSION}.tar.gz --strip-components=1 -C unbound-latest && \
     (cd unbound-latest && \
@@ -32,9 +36,14 @@ RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.g
             --with-pthreads && \
         make && \
         make install) && \
-    rm -rf unbound-latest* /var/cache/apk/*
+    rm -rf unbound-latest* unbound-checksum unbound-${UNBOUND_VERSION}.tar.gz* /var/cache/apk/*
 
-# Download AdGuard Home
+RUN git clone --branch ${VALKEY_VERSION} --depth 1 https://github.com/valkey-io/valkey.git /tmp/valkey && \
+    cd /tmp/valkey && \
+    make BUILD_TLS=yes && \
+    make install && \
+    rm -rf /tmp/valkey
+
 RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
     tar -xzf /tmp/AdGuardHome.tar.gz -C /opt && \
     rm /tmp/AdGuardHome.tar.gz
@@ -42,38 +51,35 @@ RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/
 # Stage 2: final
 FROM alpine:latest
 
-# Install runtime dependencies
+ENV ADGUARD_PATH="/opt/AdGuardHome"
+ENV ENTRYPOINT_PATH="/usr/local/bin/entrypoint.sh"
+ENV CONFIG_DEFAULT_PATH="/config_default"
+ENV PATH="${ADGUARD_PATH}:${PATH}"
+
 RUN apk update && \
     apk add --no-cache \
         busybox-suid \
         curl \
-        valkey \
-        valkey-cli \
-        valkey-compat \
         unbound \
-        bind-tools
+        bind-tools \
+        shadow && \
+    mkdir -p /var/lib/valkey
 
-# Copy default configurations
-COPY config/ /config_default
-COPY init-config.sh /usr/local/bin/init-config.sh
-RUN chmod +x /usr/local/bin/init-config.sh
+COPY config/ ${CONFIG_DEFAULT_PATH}
+COPY entrypoint.sh ${ENTRYPOINT_PATH}
+RUN chmod +x ${ENTRYPOINT_PATH}
 
-# Set environment variables
-ENV PATH="/opt/AdGuardHome:${PATH}"
-
-# Copy built binaries and AdGuard Home
 COPY --from=builder /usr/local/sbin/unbound /usr/local/sbin/unbound
-COPY --from=builder /usr/lib/libhiredis.so.1.1.0 /usr/lib/libhiredis.so.1.1.0
-COPY --from=builder /opt/AdGuardHome /opt/AdGuardHome
-RUN chmod +x /opt/AdGuardHome/AdGuardHome && \
-    chown -R root:root /opt/AdGuardHome
+COPY --from=builder ${ADGUARD_PATH} ${ADGUARD_PATH}
+COPY --from=builder /usr/local/bin/valkey-server /usr/local/bin/valkey-server
+COPY --from=builder /usr/local/bin/valkey-cli /usr/local/bin/valkey-cli
+COPY --from=builder /usr/local/bin/valkey-benchmark /usr/local/bin/valkey-benchmark
+COPY --from=builder /usr/local/bin/valkey-check-rdb /usr/local/bin/valkey-check-rdb
+COPY --from=builder /usr/local/bin/valkey-sentinel /usr/local/bin/valkey-sentinel
 
-# Copy entrypoint script
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod 755 /usr/local/bin/entrypoint.sh
+RUN chmod +x ${ADGUARD_PATH}/AdGuardHome && \
+    chown -R root:root ${ADGUARD_PATH}
 
-# Expose necessary ports
 EXPOSE 53/tcp 53/udp 853/tcp 3000/tcp 443/tcp
 
-# Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

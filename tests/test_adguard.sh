@@ -2,73 +2,87 @@
 
 set -e
 
-echo "Running AdGuard Home server test..."
+# Default parameters
+ADGUARD_PORT="3000"
+DNS_PORT="53"
+ADGUARD_PROCESS="AdGuardHome"
+ADGUARD_HOST="127.0.0.1"
+WEB_URL="http://${ADGUARD_HOST}:${ADGUARD_PORT}"
 
-# Function to check ports
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+}
+
+retry() {
+    cmd="$1"
+    max_attempts="${2:-3}"
+    sleep_seconds="${3:-2}"
+    attempt=1
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if eval "$cmd"; then
+            return 0
+        fi
+        log "Attempt $attempt failed, retrying..."
+        sleep "$sleep_seconds"
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
 check_ports() {
-    echo "Checking ports status..."
-    if ! netstat -tuln | grep -qE ':(5353|3000)'; then
-        echo "Required ports are not open"
+    log "Checking ports status..."
+    if command -v ss >/dev/null 2>&1; then
+        port_check_cmd="ss -tuln | grep -qE ':(${DNS_PORT}|${ADGUARD_PORT})'"
+    else
+        port_check_cmd="netstat -tuln | grep -qE ':(${DNS_PORT}|${ADGUARD_PORT})'"
     fi
+    if ! eval "$port_check_cmd"; then
+        log_error "Required ports ${DNS_PORT} or ${ADGUARD_PORT} are not open"
+        exit 1
+    fi
+    log "Required ports are open"
 }
 
-# Function to check process
 check_process() {
-    echo "Checking AdGuard Home process..."
-    if ! pgrep -x "AdGuardHome" > /dev/null; then
-        echo "AdGuard Home process not found"
+    log "Checking AdGuard Home process..."
+    if ! pgrep "$ADGUARD_PROCESS" >/dev/null; then
+        log_error "AdGuard Home process not found"
+        exit 1
     fi
+    log "AdGuard Home process is running"
 }
 
-# Function to test AdGuard Home web interface accessibility
 test_web_interface() {
-    echo "Attempting to connect to AdGuard Home web interface..."
-    local web_accessible=false
-    for i in 1 2 3; do
-        status_code=$(curl -k -L -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000)
-        echo "Attempt $i: HTTP status code: ${status_code}"
-        if [ "$status_code" -eq 200 ] || [ "$status_code" -eq 302 ] || [ "$status_code" -eq 307 ]; then
-            echo "AdGuard Home web interface is accessible"
-            web_accessible=true
-            break
-        fi
-        sleep 2
-    done
-
-    if [ "$web_accessible" != "true" ]; then
-        echo "AdGuard Home server test failed: Web interface is not accessible"
+    log "Testing AdGuard Home web interface..."
+    retry "status_code=\$(curl -k -L -s -o /dev/null -w '%{http_code}' $WEB_URL); [ \"\$status_code\" -eq 200 ] || [ \"\$status_code\" -eq 302 ] || [ \"\$status_code\" -eq 307 ] || [ \"\$status_code\" -eq 401 ] || [ \"\$status_code\" -eq 403 ]" 3 2
+    if [ $? -ne 0 ]; then
+        log_error "AdGuard Home web interface is not accessible at $WEB_URL"
         exit 1
     fi
+    log "AdGuard Home web interface is accessible"
 }
 
-# Function to test DNS resolution through AdGuard Home
 test_dns_resolution() {
-    echo "Testing DNS resolution..."
-    local dns_working=false
-    for i in 1 2 3; do
-        nslookup_output=$(nslookup example.com 127.0.0.1)
-        echo "$nslookup_output"
-        if echo "$nslookup_output" | grep -q 'Address'; then
-            echo "DNS resolution test passed"
-            dns_working=true
-            break
-        fi
-        echo "DNS resolution attempt $i failed, retrying..."
-        sleep 2
-    done
-
-    if [ "$dns_working" != "true" ]; then
-        echo "AdGuard Home DNS resolution test failed"
+    log "Testing DNS resolution..."
+    retry "nslookup_output=\$(nslookup example.com $ADGUARD_HOST); echo \"\$nslookup_output\" | grep -q 'Address'" 3 2
+    if [ $? -ne 0 ]; then
+        log_error "AdGuard Home DNS resolution test failed"
         exit 1
     fi
+    log "DNS resolution test passed"
 }
 
-# Show diagnostic information
-check_ports
-check_process
+main() {
+    log "Running AdGuard Home server test..."
+    check_ports
+    check_process
+    test_web_interface
+    test_dns_resolution
+    log "AdGuard Home server test completed successfully"
+}
 
-# Run tests
-test_web_interface
-test_dns_resolution
-
-echo "AdGuard Home server test completed successfully"
+main "$@"

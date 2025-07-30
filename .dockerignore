@@ -1,0 +1,43 @@
+# Ignore sensitive files
+.git
+.gitignore
+.github
+*.md
+README.md
+
+# Ignore IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Ignore CI/CD files
+.github/workflows/
+
+# Ignore test files (they should be mounted at runtime)
+tests/
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Ignore security-sensitive files
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+.env
+.env.*
+config.local.*
+secrets/
+private/
+
+# Ignore backup files
+*.bak
+*.backup
+*~

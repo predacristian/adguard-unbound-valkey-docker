@@ -1,6 +1,6 @@
 # DNS Stack
 
-A containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution and ad blocking.
+A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution, caching, and ad blocking.
 
 ## Components
 
@@ -48,6 +48,7 @@ Default configurations are provided and copied to these locations on first run.
 The container uses the following build arguments:
 - `UNBOUND_VERSION`: Version of Unbound DNS to install
 - `ADGUARD_VERSION`: Version of AdGuard Home to install
+- `VALKEY_VERSION`: Version of Valkey to install
 
 ## Building the Docker Image 🛠️
 
