@@ -1,0 +1,46 @@
+# Ignore build artifacts
+*.o
+*.out
+*.a
+*.so
+*.exe
+*.pyc
+__pycache__/
+
+# Ignore logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+*.code-workspace
+
+# Ignore backup files
+*.bak
+*.backup
+
+# Ignore Docker and CI/CD files
+.github/
+.github/workflows/
+
+# Ignore secrets and sensitive files
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+.env
+.env.*
+config.local.*
+secrets/
+private/
+
+# Ignore git itself
+.git/
