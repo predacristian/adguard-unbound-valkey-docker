@@ -26,8 +26,7 @@ Thumbs.db
 *.backup
 
 # Ignore Docker and CI/CD files
-.github/
-.github/workflows/
+.github/copilot-instructions.md
 
 # Ignore secrets and sensitive files
 *.key

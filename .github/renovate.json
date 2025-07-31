@@ -1,0 +1,24 @@
+{
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["Dockerfile"],
+      "matchStrings": [
+        "ARG (?<depName>UNBOUND_VERSION)=\"(?<currentValue>[^\"]+)\"",
+        "ARG (?<depName>ADGUARD_VERSION)=\"(?<currentValue>[^\"]+)\"",
+        "ARG (?<depName>VALKEY_VERSION)=\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "{{#if (equals depName 'UNBOUND_VERSION')}}NLnetLabs/unbound{{/if}}{{#if (equals depName 'ADGUARD_VERSION')}}AdguardTeam/AdGuardHome{{/if}}{{#if (equals depName 'VALKEY_VERSION')}}valkey-io/valkey{{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["alpine"],
+      "groupName": "Alpine Linux Base Image",
+      "automerge": false
+    }
+  ]
+}
