@@ -1,0 +1,40 @@
+{
+  "extends": ["config:base"],
+  "docker": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile"],
+      "matchNames": ["UNBOUND_VERSION"],
+      "datasource": "github-releases",
+      "depName": "NLnetLabs/unbound",
+      "groupName": "Unbound Version",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchNames": ["ADGUARD_VERSION"],
+      "datasource": "github-releases",
+      "depName": "AdguardTeam/AdGuardHome",
+      "groupName": "AdGuard Home Version",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchNames": ["VALKEY_VERSION"],
+      "datasource": "github-releases",
+      "depName": "valkey-io/valkey",
+      "groupName": "Valkey Version",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchNames": ["alpine"],
+      "datasource": "docker",
+      "depName": "alpine",
+      "groupName": "Alpine Linux Base Image",
+      "automerge": false
+    }
+  ]
+}
