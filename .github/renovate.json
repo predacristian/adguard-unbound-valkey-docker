@@ -1,9 +1,13 @@
 {
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["Dockerfile"],
+      "managerFilePatterns": [
+        "/Dockerfile/"
+      ],
       "matchStrings": [
         "ARG (?<depName>UNBOUND_VERSION)=\"(?<currentValue>[^\"]+)\"",
         "ARG (?<depName>ADGUARD_VERSION)=\"(?<currentValue>[^\"]+)\"",
@@ -15,8 +19,12 @@
   ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["alpine"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "alpine"
+      ],
       "groupName": "Alpine Linux Base Image",
       "automerge": false
     }
