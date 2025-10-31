@@ -3,7 +3,7 @@ FROM alpine:3.22.2 AS builder
 
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.69"
-ARG VALKEY_VERSION="8.1.3"
+ARG VALKEY_VERSION="9.0.0"
 
 RUN apk update && \
     apk add --no-cache \
