@@ -1,5 +1,5 @@
 # Stage 1: builder
-FROM alpine:3.22.2 AS builder
+FROM alpine:3.23.0 AS builder
 
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.69"
