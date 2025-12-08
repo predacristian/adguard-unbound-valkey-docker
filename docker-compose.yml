@@ -1,0 +1,61 @@
+services:
+  dns-stack:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.23.0"
+        UNBOUND_VERSION: "1.23.1"
+        ADGUARD_VERSION: "v0.107.71"
+        VALKEY_VERSION: "9.0.0"
+    image: dns-stack:latest
+    container_name: dns-stack
+    restart: unless-stopped
+
+    ports:
+      # DNS
+      - "53:53/tcp"
+      - "53:53/udp"
+      # DNS over TLS
+      - "853:853/tcp"
+      # AdGuard Home Web UI
+      - "3000:3000/tcp"
+      # HTTPS (when enabled) - using 8443 to avoid conflicts
+      - "8443:443/tcp"
+
+    volumes:
+      # Persist configuration
+      - ./data/config:/config
+      # Mount tests for easy testing
+      - ./tests:/tests:ro
+
+    environment:
+      # Customize as needed
+      TZ: "UTC"
+
+    # Required for low-numbered ports and network performance
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+
+    # Network performance tuning (optional, comment out if not needed)
+    sysctls:
+      - net.core.rmem_max=8388608
+      - net.core.wmem_max=8388608
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "dig +short @127.0.0.1 -p 5335 example.com | grep -q . && /usr/local/bin/valkey-cli -s /tmp/valkey.sock ping >/dev/null 2>&1 && curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    networks:
+      - dns-network
+
+networks:
+  dns-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

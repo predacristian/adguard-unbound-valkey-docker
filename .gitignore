@@ -43,3 +43,6 @@ private/
 
 # Ignore git itself
 .git/
+
+# Ignore local data directory (docker-compose volumes)
+data/
