@@ -1,5 +1,8 @@
+# Pin Alpine for reproducible builds; Renovate will manage ALPINE_VERSION updates via .github/renovate.json
+ARG ALPINE_VERSION="3.23.0"
+
 # Stage 1: builder
-FROM alpine:3.23.0 AS builder
+FROM alpine:${ALPINE_VERSION} AS builder
 
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.71"
@@ -63,7 +66,7 @@ RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/
     rm -f /tmp/AdGuardHome.tar.gz /tmp/adguard-checksums.txt /tmp/adguard-checksum
 
 # Stage 2: final
-FROM alpine:latest
+FROM alpine:${ALPINE_VERSION}
 
 ENV ADGUARD_PATH="/opt/AdGuardHome"
 ENV ENTRYPOINT_PATH="/usr/local/bin/entrypoint.sh"

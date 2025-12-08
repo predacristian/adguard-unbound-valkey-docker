@@ -61,9 +61,33 @@ jobs:
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to initialize..."
-        sleep 25  # TODO: Replace with health check or log-based readiness
+        timeout=90
+        elapsed=0
+        interval=5
+        container=dns-stack-test
+        health=""
+        while [ $elapsed -lt $timeout ]; do
+          if docker inspect --format='{{.State.Health.Status}}' $container >/dev/null 2>&1; then
+            health=$(docker inspect --format='{{.State.Health.Status}}' $container)
+            if [ "$health" = "healthy" ]; then
+              echo "Container is healthy"
+              break
+            fi
+            echo "Waiting for container to be healthy... ($elapsed/$timeout seconds) status=$health"
+          else
+            echo "Container has no health status yet (elapsed=${elapsed}s)"
+          fi
+          sleep $interval
+          elapsed=$((elapsed + interval))
+        done
+        if [ "$health" != "healthy" ]; then
+          echo "Container failed to become healthy within $timeout seconds"
+          docker inspect $container || true
+          docker logs $container || true
+          exit 1
+        fi
         docker ps
-        docker logs dns-stack-test
+        docker logs $container
     - name: Set permissions on test scripts
       run: |
         chmod +x ./tests/test_unbound.sh
