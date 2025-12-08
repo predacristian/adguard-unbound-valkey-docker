@@ -32,6 +32,8 @@ services:
     environment:
       # Customize as needed
       TZ: "UTC"
+      # ADGUARD_PASSWORD: "YourSecurePassword"  # Recommended: Set a custom password
+      # ADGUARD_USERNAME: "admin"  # Optional: Custom username (default: admin)
 
     # Required for low-numbered ports and network performance
     cap_add:

@@ -1,0 +1,60 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ["-x", "--severity=warning"]
+        exclude: ^tests/integration\.bats$
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ["--ignore", "DL3018", "--ignore", "DL3008"]
+        # DL3018: Pin versions in apk add (we use Renovate)
+        # DL3008: Pin versions in apt-get (not applicable)
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: package.lock.json
+
+  # YAML validation
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        args: ["--unsafe"]  # Allow custom YAML tags
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  # Markdown linting (optional)
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: ["--fix"]
+
+  # Docker Compose validation
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.29.3
+    hooks:
+      - id: check-jsonschema
+        name: Validate docker-compose.yml
+        files: docker-compose\.yml$
+        types: [yaml]
+        args: ["--schemafile", "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json"]

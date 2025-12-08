@@ -138,6 +138,80 @@ init_configuration() {
     log "Config init done"
 }
 
+setup_adguard_credentials() {
+    log "Setting up AdGuard Home credentials..."
+
+    local config_file="/config/AdGuardHome/AdGuardHome.yaml"
+    local credentials_file="/config/AdGuardHome/.credentials"
+
+    # Check if credentials already configured
+    if [ -f "$credentials_file" ]; then
+        log "Credentials already configured"
+        return 0
+    fi
+
+    # Determine username and password
+    local username="${ADGUARD_USERNAME:-admin}"
+    local password="${ADGUARD_PASSWORD:-}"
+
+    # Generate random password if not provided
+    if [ -z "$password" ]; then
+        password=$(openssl rand -base64 16 | tr -d '/+=' | cut -c1-16)
+        log "Generated random password for AdGuard Home"
+    else
+        log "Using provided ADGUARD_PASSWORD"
+    fi
+
+    # Hash the password using AdGuard Home's built-in hasher
+    # Note: AdGuard uses bcrypt, we'll use htpasswd as a fallback
+    local password_hash
+    if command -v htpasswd >/dev/null 2>&1; then
+        password_hash=$(htpasswd -nbB "$username" "$password" | cut -d: -f2)
+    else
+        # Fallback: use the provided password as-is and let AdGuard handle it
+        log "WARNING: htpasswd not available, using AdGuard's default hashing"
+        password_hash='$2y$10$TJbQGpmgYZQ34WP3WjGoC.6Ibg40RnajD6OpLnV9xlfBCDZaS7L3y'
+        password="admin"
+        log "WARNING: Using default credentials admin/admin"
+        log "SECURITY: Set ADGUARD_PASSWORD environment variable to use custom password"
+    fi
+
+    # Update config file with new credentials
+    if [ -f "$config_file" ]; then
+        # Replace the username and password in the YAML
+        sed -i "s/name: .*/name: $username/" "$config_file"
+        sed -i "s|password: .*|password: $password_hash|" "$config_file"
+    fi
+
+    # Save credentials for reference (only if not using default)
+    if [ "$password" != "admin" ]; then
+        cat > "$credentials_file" <<EOF
+# AdGuard Home Credentials
+# Generated: $(date)
+Username: $username
+Password: $password
+
+⚠️  IMPORTANT: Save these credentials securely!
+⚠️  This file will not be shown again on subsequent starts.
+
+Access AdGuard Home at: http://localhost:3000
+EOF
+        chmod 600 "$credentials_file"
+
+        log "═══════════════════════════════════════════════════════"
+        log "AdGuard Home Credentials:"
+        log "  Username: $username"
+        log "  Password: $password"
+        log ""
+        log "⚠️  SAVE THESE CREDENTIALS NOW!"
+        log "Access: http://localhost:3000"
+        log "═══════════════════════════════════════════════════════"
+    else
+        log "⚠️  WARNING: Using default admin/admin credentials!"
+        log "⚠️  Set ADGUARD_PASSWORD environment variable for production use"
+    fi
+}
+
 start_valkey() {
     log "Starting Valkey..."
 
@@ -198,6 +272,8 @@ main() {
 
     init_configuration || exit 1
 
+    setup_adguard_credentials || exit 1
+
     validate_configs || exit 1
 
     start_valkey || exit 1
@@ -206,7 +282,6 @@ main() {
 
     log "All services started. DNS Stack ready."
     log "AdGuard Home: http://localhost:3000"
-    log "Default credentials: admin/admin"
 
     while true; do
         if ! kill -0 $UNBOUND_PID 2>/dev/null; then

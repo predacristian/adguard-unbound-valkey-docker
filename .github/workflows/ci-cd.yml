@@ -111,6 +111,25 @@ jobs:
       run: |
         echo "=== Running BATS Tests ==="
         docker exec dns-stack-test bats --formatter tap /tests/integration.bats
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        image-ref: 'dns-stack-test:${{ steps.tag.outputs.tag }}'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+    - name: Upload Trivy results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    - name: Run Trivy vulnerability scanner (table output)
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        image-ref: 'dns-stack-test:${{ steps.tag.outputs.tag }}'
+        format: 'table'
+        severity: 'CRITICAL,HIGH'
+        exit-code: '0'
     - name: Test Summary
       if: always()
       run: |

@@ -81,7 +81,9 @@ RUN apk update && \
         bind-tools \
         shadow \
         bats \
-        bash && \
+        bash \
+        apache2-utils \
+        openssl && \
     mkdir -p /var/lib/valkey
 
 COPY config/ ${CONFIG_DEFAULT_PATH}
