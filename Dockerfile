@@ -79,7 +79,9 @@ RUN apk update && \
         curl \
         unbound \
         bind-tools \
-        shadow && \
+        shadow \
+        bats \
+        bash && \
     mkdir -p /var/lib/valkey
 
 COPY config/ ${CONFIG_DEFAULT_PATH}

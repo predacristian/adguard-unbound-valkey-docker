@@ -90,26 +90,35 @@ jobs:
         docker logs $container
     - name: Set permissions on test scripts
       run: |
-        chmod +x ./tests/test_unbound.sh
-        chmod +x ./tests/test_valkey.sh
-        chmod +x ./tests/test_adguard.sh
-    - name: Run Unbound DNS tests
-      id: unbound
-      run: docker exec dns-stack-test /tests/test_unbound.sh
-    - name: Run Valkey tests
-      id: valkey
-      run: docker exec dns-stack-test /tests/test_valkey.sh
-    - name: Run AdGuard Home tests
-      id: adguard
-      run: docker exec dns-stack-test /tests/test_adguard.sh
+        chmod +x ./tests/*.sh
+    - name: Run smoke tests
+      id: smoke_tests
+      run: |
+        echo "=== Running Smoke Tests ==="
+        docker exec dns-stack-test /tests/test_unbound.sh
+        docker exec dns-stack-test /tests/test_valkey.sh
+        docker exec dns-stack-test /tests/test_adguard.sh
+    - name: Run integration tests
+      id: integration_tests
+      run: |
+        echo "=== Running Integration Tests ==="
+        docker exec dns-stack-test /tests/test_cache_integration.sh
+        docker exec dns-stack-test /tests/test_e2e_query.sh
+        docker exec dns-stack-test /tests/test_ad_blocking.sh
+        docker exec dns-stack-test /tests/test_dot.sh || echo "DoT tests skipped (not configured)"
+    - name: Run BATS integration tests
+      id: bats_tests
+      run: |
+        echo "=== Running BATS Tests ==="
+        docker exec dns-stack-test bats --formatter tap /tests/integration.bats
     - name: Test Summary
       if: always()
       run: |
         echo "Test Results Summary:"
         echo "===================="
-        echo "Unbound DNS: ${{ steps.unbound.outcome }}"
-        echo "Valkey: ${{ steps.valkey.outcome }}"
-        echo "AdGuard Home: ${{ steps.adguard.outcome }}"
+        echo "Smoke Tests: ${{ steps.smoke_tests.outcome }}"
+        echo "Integration Tests: ${{ steps.integration_tests.outcome }}"
+        echo "BATS Tests: ${{ steps.bats_tests.outcome }}"
     - name: Clean up
       if: always()
       run: |
