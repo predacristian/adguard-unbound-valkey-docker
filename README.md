@@ -365,17 +365,6 @@ See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
 - Better entrypoint.sh error handling
 - .gitignore for data directory
 
-## Documentation
-
-- [.github/VERSIONING.md](.github/VERSIONING.md) - **Versioning & release automation guide**
-- [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
-- [NEXT_IMPROVEMENTS.md](NEXT_IMPROVEMENTS.md) - Future enhancement roadmap
-- [SECURITY_IMPROVEMENTS.md](SECURITY_IMPROVEMENTS.md) - Detailed security guide
-- [tests/README.md](tests/README.md) - Testing documentation
-- [.github/SETUP_PRECOMMIT.md](.github/SETUP_PRECOMMIT.md) - Pre-commit setup
-- [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) - CI/CD guide
-- [.github/SECURITY_QUICK_REFERENCE.md](.github/SECURITY_QUICK_REFERENCE.md) - Security quick ref
-
 ## Troubleshooting
 
 ### Can't login to AdGuard
@@ -404,19 +393,6 @@ make health
 make logs
 ```
 
-## Contributing
-
-1. Fork the repository
-2. Install pre-commit hooks: `pre-commit install`
-3. Create feature branch
-4. Make changes and test: `make test`
-5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format:
-   - `feat: add new feature` (minor version bump)
-   - `fix: resolve bug` (patch version bump)
-   - `docs: update documentation` (patch version bump)
-   - See [.github/VERSIONING.md](.github/VERSIONING.md) for details
-6. Push and create PR
-
 ### Commit Message Format
 
 ```bash
@@ -433,9 +409,3 @@ BREAKING CHANGE: Config files moved to new location"
 ```
 
 Releases are automatically created when commits are merged to `main`.
-
-## Support
-
-- Issues: [GitHub Issues](https://github.com/yourusername/repo/issues)
-- Documentation: See docs above
-- Security: View Security tab for vulnerability reports
