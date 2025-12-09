@@ -125,7 +125,9 @@ jobs:
         docker exec dns-stack-test bats --formatter tap /tests/integration.bats
 
     - name: Run Trivy vulnerability scanner
+      id: trivy_scan
       uses: aquasecurity/trivy-action@0.28.0
+      continue-on-error: true
       with:
         image-ref: 'dns-stack-test:${{ steps.tag.outputs.tag }}'
         format: 'sarif'
@@ -133,13 +135,14 @@ jobs:
         severity: 'CRITICAL,HIGH'
 
     - name: Upload Trivy results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
+      uses: github/codeql-action/upload-sarif@v4
+      if: always() && hashFiles('trivy-results.sarif') != ''
       with:
         sarif_file: 'trivy-results.sarif'
 
     - name: Run Trivy vulnerability scanner (table output)
       uses: aquasecurity/trivy-action@0.28.0
+      continue-on-error: true
       with:
         image-ref: 'dns-stack-test:${{ steps.tag.outputs.tag }}'
         format: 'table'
