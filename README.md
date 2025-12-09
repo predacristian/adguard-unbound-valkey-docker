@@ -3,6 +3,8 @@
 ![CI/CD Status](https://img.shields.io/badge/CI%2FCD-Optimized-brightgreen)
 ![Security Scanning](https://img.shields.io/badge/Security-Trivy%20%2B%20Gitleaks-blue)
 ![Pre-commit Hooks](https://img.shields.io/badge/Pre--commit-Enabled-orange)
+![Semantic Release](https://img.shields.io/badge/semantic--release-automated-e10079)
+![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow)
 
 A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution, caching, and ad blocking.
 
@@ -19,6 +21,8 @@ A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Va
 - 🛡️ **Security scanning** - Trivy vulnerability + Gitleaks secret detection
 - ⚡ **Optimized CI/CD** - Parallel multi-arch builds (40-84% faster)
 - 🪝 **Pre-commit hooks** - Automated code quality checks
+- 🤖 **Automated releases** - Semantic versioning with auto-generated changelogs
+- 🔄 **Dependency automation** - Renovate auto-merges safe updates
 - 🐳 **Docker Compose** - Simple orchestration with Makefile
 - 📦 **DNS caching** - Valkey backend with Unix socket
 - 🚫 **Ad blocking** - Custom filtering through AdGuard Home
@@ -48,6 +52,7 @@ make down
 ### Using Docker
 
 ```bash
+# Use latest version
 docker run -d \
   --name dns-stack \
   -p 53:53/tcp \
@@ -56,8 +61,21 @@ docker run -d \
   -p 3000:3000/tcp \
   -e ADGUARD_PASSWORD=YourSecurePassword123 \
   -v ./config:/config \
-  dns-stack
+  ghcr.io/yourusername/repo:latest
+
+# Pin to specific version (recommended for production)
+docker run -d \
+  --name dns-stack \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -p 853:853/tcp \
+  -p 3000:3000/tcp \
+  -e ADGUARD_PASSWORD=YourSecurePassword123 \
+  -v ./config:/config \
+  ghcr.io/yourusername/repo:v1.2.3
 ```
+
+> **Note:** Replace `yourusername/repo` with your actual repository path. See [releases](https://github.com/yourusername/repo/releases) for available versions.
 
 ## Security & Access 🔐
 
@@ -304,6 +322,8 @@ See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
 
 ## Documentation
 
+- [.github/VERSIONING.md](.github/VERSIONING.md) - **Versioning & release automation guide**
+- [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [NEXT_IMPROVEMENTS.md](NEXT_IMPROVEMENTS.md) - Future enhancement roadmap
 - [SECURITY_IMPROVEMENTS.md](SECURITY_IMPROVEMENTS.md) - Detailed security guide
 - [tests/README.md](tests/README.md) - Testing documentation
@@ -345,8 +365,29 @@ make logs
 2. Install pre-commit hooks: `pre-commit install`
 3. Create feature branch
 4. Make changes and test: `make test`
-5. Commit (hooks will run automatically)
+5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format:
+   - `feat: add new feature` (minor version bump)
+   - `fix: resolve bug` (patch version bump)
+   - `docs: update documentation` (patch version bump)
+   - See [.github/VERSIONING.md](.github/VERSIONING.md) for details
 6. Push and create PR
+
+### Commit Message Format
+
+```bash
+# Feature
+git commit -m "feat: add Prometheus metrics endpoint"
+
+# Bug fix
+git commit -m "fix: correct Valkey socket permissions"
+
+# Breaking change
+git commit -m "feat!: change config structure
+
+BREAKING CHANGE: Config files moved to new location"
+```
+
+Releases are automatically created when commits are merged to `main`.
 
 ## License
 
