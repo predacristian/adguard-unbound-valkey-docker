@@ -1,7 +1,20 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeDigest",
+    ":automergeBranch"
   ],
+  "schedule": [
+    "after 10pm every weekday",
+    "before 5am every weekday",
+    "every weekend"
+  ],
+  "timezone": "UTC",
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
   "customManagers": [
     {
       "customType": "regex",
@@ -19,6 +32,31 @@
   ],
   "packageRules": [
     {
+      "description": "Auto-merge patch updates for all dependencies",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "branch",
+      "requiredStatusChecks": null,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Auto-merge minor updates for Dockerfile ARG dependencies",
+      "matchManagers": [
+        "regex"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "branch",
+      "requiredStatusChecks": null,
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Alpine base image - manual review required",
       "matchDatasources": [
         "docker"
       ],
@@ -26,7 +64,28 @@
         "alpine"
       ],
       "groupName": "Alpine Linux Base Image",
-      "automerge": false
+      "automerge": false,
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "Group all non-major updates together",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    },
+    {
+      "description": "Major updates require manual review",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "major-update"
+      ]
     }
   ]
 }

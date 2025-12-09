@@ -3,6 +3,8 @@
 ![CI/CD Status](https://img.shields.io/badge/CI%2FCD-Optimized-brightgreen)
 ![Security Scanning](https://img.shields.io/badge/Security-Trivy%20%2B%20Gitleaks-blue)
 ![Pre-commit Hooks](https://img.shields.io/badge/Pre--commit-Enabled-orange)
+![Semantic Release](https://img.shields.io/badge/semantic--release-automated-e10079)
+![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow)
 
 A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution, caching, and ad blocking.
 
@@ -14,16 +16,89 @@ A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Va
 
 ## Features
 
-- 🔒 **Automatic credential generation** - Random passwords on first run
-- 🧪 **Comprehensive testing** - Smoke, integration, and BATS tests
-- 🛡️ **Security scanning** - Trivy vulnerability + Gitleaks secret detection
-- ⚡ **Optimized CI/CD** - Parallel multi-arch builds (40-84% faster)
-- 🪝 **Pre-commit hooks** - Automated code quality checks
-- 🐳 **Docker Compose** - Simple orchestration with Makefile
-- 📦 **DNS caching** - Valkey backend with Unix socket
-- 🚫 **Ad blocking** - Custom filtering through AdGuard Home
-- 🔐 **DNS over TLS (DoT)** - Secure DNS resolution
-- 🎯 **DNSSEC validation** - Enhanced security
+- Automated credential generation on first run
+- Smoke, integration, and BATS testing
+- Vulnerability scanning (Trivy, Gitleaks)
+- Parallel multi-arch builds (amd64, arm64)
+- Pre-commit hooks (shellcheck, hadolint, secrets detection)
+- Semantic versioning with automated releases
+- Automated dependency updates via Renovate
+- DNS caching via Valkey
+- Network-wide ad blocking
+- DNS over TLS upstream
+- DNSSEC validation enabled
+
+## Quick Start
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Clone and start
+git clone <repo-url>
+cd adguard-unbound-valkey-docker
+make up
+
+# View logs and credentials
+make logs
+
+# Run tests
+make test
+
+# Stop
+make down
+```
+
+### Using Docker
+
+```bash
+# Use latest version
+docker run -d \
+  --name dns-stack \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -p 853:853/tcp \
+  -p 3000:3000/tcp \
+  -e ADGUARD_PASSWORD=YourSecurePassword123 \
+  -v ./config:/config \
+  ghcr.io/yourusername/repo:latest
+
+# Pin to specific version (recommended for production)
+docker run -d \
+  --name dns-stack \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -p 853:853/tcp \
+  -p 3000:3000/tcp \
+  -e ADGUARD_PASSWORD=YourSecurePassword123 \
+  -v ./config:/config \
+  ghcr.io/yourusername/repo:v1.2.3
+```
+
+Replace `yourusername/repo` with your repository path. Check releases for available versions.
+
+## Security & Access
+
+### AdGuard Home Web Interface
+
+**Access:** `http://localhost:3000`
+
+**First Run Credentials:**
+Random password generated automatically and saved to `/config/AdGuardHome/.credentials`
+
+```bash
+# View credentials
+docker logs dns-stack | grep "Password:"
+```
+
+**Custom Password (Recommended):**
+```yaml
+# docker-compose.yml
+environment:
+  ADGUARD_PASSWORD: "YourSecurePassword123"
+  ADGUARD_USERNAME: "admin"  # optional
+```
+
+⚠️ **Security:** Random passwords are generated if `ADGUARD_PASSWORD` is not set. Default `admin/admin` only used as fallback.
 
 ## Quick Start 🚀
 
@@ -77,18 +152,6 @@ docker logs dns-stack | grep "Password:"
 make logs
 ```
 
-**Custom Password (Recommended):**
-```yaml
-# docker-compose.yml
-environment:
-  ADGUARD_PASSWORD: "YourSecurePassword123"
-  ADGUARD_USERNAME: "admin"  # optional
-```
-
-⚠️ **Security:** Random passwords are generated if `ADGUARD_PASSWORD` is not set. Default `admin/admin` only used as fallback.
-
-## Default Ports
-
 | Port | Protocol | Service |
 |------|----------|---------|
 | 53 | TCP/UDP | DNS |
@@ -96,7 +159,7 @@ environment:
 | 3000 | TCP | AdGuard Home UI |
 | 8443 | TCP | HTTPS (when TLS enabled) |
 
-## Configuration ⚙️
+## Configuration
 
 ### Directory Structure
 
@@ -122,7 +185,7 @@ Default configurations are copied on first run.
 - `ADGUARD_VERSION` - AdGuard Home version (default: `v0.107.71`)
 - `VALKEY_VERSION` - Valkey version (default: `9.0.0`)
 
-## Testing 🧪
+## Testing
 
 Comprehensive test suite with smoke, integration, and structured BATS tests:
 
@@ -137,19 +200,19 @@ make test-e2e          # End-to-end query path
 
 ### Test Coverage
 
-- ✅ Service health checks
-- ✅ DNS resolution (A, AAAA, MX, TXT records)
-- ✅ Unbound → Valkey caching via Unix socket
-- ✅ AdGuard → Unbound forwarding
-- ✅ Ad blocking functionality
-- ✅ DNSSEC validation
-- ✅ DNS-over-TLS configuration
-- ✅ Cache performance
-- ✅ Reverse DNS lookups
+- Service health checks
+- DNS resolution (A, AAAA, MX, TXT records)
+- Unbound → Valkey caching via Unix socket
+- AdGuard → Unbound forwarding
+- Ad blocking functionality
+- DNSSEC validation
+- DNS-over-TLS configuration
+- Cache performance
+- Reverse DNS lookups
 
 See [tests/README.md](tests/README.md) for details.
 
-## Development 🛠️
+## Development
 
 ### Building Locally
 
@@ -213,7 +276,7 @@ Automated security scanning on every push and daily:
 
 View reports: **Repository → Security tab**
 
-## CI/CD ⚡
+## CI/CD
 
 Optimized multi-architecture build pipeline:
 
@@ -227,11 +290,11 @@ Optimized multi-architecture build pipeline:
 
 ### Features
 
-- ⚡ **Parallel architecture builds** (amd64 + arm64 simultaneously)
-- 🎯 **Fast testing** (amd64 only - 5-7 min)
-- 💾 **Dual-layer caching** (Registry + GitHub Actions)
-- 🎨 **Smart triggers** (skip docs-only changes)
-- 🏗️ **Multi-arch support** (linux/amd64, linux/arm64)
+- Parallel architecture builds (amd64 + arm64 simultaneously)
+- Fast testing (amd64 only, 5-7 min)
+- Dual-layer caching (Registry + GitHub Actions)
+- Smart triggers (skip docs-only changes)
+- Multi-arch support (linux/amd64, linux/arm64)
 
 See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
 
@@ -304,6 +367,8 @@ See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
 
 ## Documentation
 
+- [.github/VERSIONING.md](.github/VERSIONING.md) - **Versioning & release automation guide**
+- [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [NEXT_IMPROVEMENTS.md](NEXT_IMPROVEMENTS.md) - Future enhancement roadmap
 - [SECURITY_IMPROVEMENTS.md](SECURITY_IMPROVEMENTS.md) - Detailed security guide
 - [tests/README.md](tests/README.md) - Testing documentation
@@ -345,15 +410,32 @@ make logs
 2. Install pre-commit hooks: `pre-commit install`
 3. Create feature branch
 4. Make changes and test: `make test`
-5. Commit (hooks will run automatically)
+5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format:
+   - `feat: add new feature` (minor version bump)
+   - `fix: resolve bug` (patch version bump)
+   - `docs: update documentation` (patch version bump)
+   - See [.github/VERSIONING.md](.github/VERSIONING.md) for details
 6. Push and create PR
 
-## License
+### Commit Message Format
 
-[Your License]
+```bash
+# Feature
+git commit -m "feat: add Prometheus metrics endpoint"
+
+# Bug fix
+git commit -m "fix: correct Valkey socket permissions"
+
+# Breaking change
+git commit -m "feat!: change config structure
+
+BREAKING CHANGE: Config files moved to new location"
+```
+
+Releases are automatically created when commits are merged to `main`.
 
 ## Support
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/repo/issues)
-- 📖 **Documentation**: See docs above
-- 🔒 **Security**: View Security tab for vulnerability reports
+- Issues: [GitHub Issues](https://github.com/yourusername/repo/issues)
+- Documentation: See docs above
+- Security: View Security tab for vulnerability reports

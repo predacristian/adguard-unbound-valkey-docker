@@ -43,7 +43,7 @@ Basic health and functionality checks for each service.
 ### Integration Tests (Comprehensive, 2min)
 Tests for integration between components and core functionality.
 
-**test_cache_integration.sh** - 7 tests ⭐ CRITICAL
+**test_cache_integration.sh** - 7 tests (CRITICAL)
 - Unix socket exists and accessible
 - Socket permissions correct
 - Unbound actually caches in Valkey (THE KEY TEST!)
@@ -140,7 +140,7 @@ docker exec dns-stack bats /tests/integration.bats
 
 ## Test Coverage
 
-### ✅ What IS Tested
+### Tested
 
 **Core Functionality:**
 - DNS resolution (A, AAAA, MX, TXT records)
@@ -165,7 +165,7 @@ docker exec dns-stack bats /tests/integration.bats
 - Unbound → Cloudflare upstream
 - Full end-to-end query path
 
-### ❌ What IS NOT Tested
+### Not Tested
 
 - Load testing (concurrent queries)
 - Memory usage under load
