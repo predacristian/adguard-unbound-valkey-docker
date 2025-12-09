@@ -1,23 +1,20 @@
-name: DNS Stack CI/CD
+name: DNS Stack CI/CD (Optimized)
 
 on:
   workflow_dispatch:
-    inputs:
-      unbound_version:
-        description: 'Unbound version'
-        required: false
-      adguard_version:
-        description: 'AdGuard version'
-        required: false
   pull_request:
     branches: [ "main" ]
     paths-ignore:
       - 'README.md'
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
       - main
     paths-ignore:
       - 'README.md'
+      - 'docs/**'
+      - '*.md'
   merge_group:
     branches: [ main ]
 
@@ -26,16 +23,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Fast single-arch build for testing (amd64 only)
   build-and-test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
     outputs:
       test_tag: ${{ steps.tag.outputs.tag }}
     steps:
     - uses: actions/checkout@v6
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+
     - name: Generate test tag
       id: tag
       run: |
@@ -43,14 +41,23 @@ jobs:
         CLEAN_BRANCH_NAME=$(echo $BRANCH_NAME | tr '/' '-')
         SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
         echo "tag=${CLEAN_BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-    - name: Build test image
+
+    # Build ONLY amd64 for testing (much faster!)
+    - name: Build test image (amd64 only)
       uses: docker/build-push-action@v6
       with:
         context: .
         load: true
+        platforms: linux/amd64
         tags: dns-stack-test:${{ steps.tag.outputs.tag }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # Aggressive caching for faster builds
+        cache-from: |
+          type=gha,scope=main
+          type=gha,scope=${{ github.ref_name }}
+        cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
     - name: Start test container
       run: |
         sudo sysctl -w net.core.rmem_max=8388608
@@ -58,6 +65,7 @@ jobs:
         docker run -d --name dns-stack-test \
           -v ${{ github.workspace }}/tests:/tests \
           dns-stack-test:${{ steps.tag.outputs.tag }}
+
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to initialize..."
@@ -88,9 +96,11 @@ jobs:
         fi
         docker ps
         docker logs $container
+
     - name: Set permissions on test scripts
       run: |
         chmod +x ./tests/*.sh
+
     - name: Run smoke tests
       id: smoke_tests
       run: |
@@ -98,6 +108,7 @@ jobs:
         docker exec dns-stack-test /tests/test_unbound.sh
         docker exec dns-stack-test /tests/test_valkey.sh
         docker exec dns-stack-test /tests/test_adguard.sh
+
     - name: Run integration tests
       id: integration_tests
       run: |
@@ -106,11 +117,13 @@ jobs:
         docker exec dns-stack-test /tests/test_e2e_query.sh
         docker exec dns-stack-test /tests/test_ad_blocking.sh
         docker exec dns-stack-test /tests/test_dot.sh || echo "DoT tests skipped (not configured)"
+
     - name: Run BATS integration tests
       id: bats_tests
       run: |
         echo "=== Running BATS Tests ==="
         docker exec dns-stack-test bats --formatter tap /tests/integration.bats
+
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@0.28.0
       with:
@@ -118,11 +131,13 @@ jobs:
         format: 'sarif'
         output: 'trivy-results.sarif'
         severity: 'CRITICAL,HIGH'
+
     - name: Upload Trivy results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+
     - name: Run Trivy vulnerability scanner (table output)
       uses: aquasecurity/trivy-action@0.28.0
       with:
@@ -130,6 +145,7 @@ jobs:
         format: 'table'
         severity: 'CRITICAL,HIGH'
         exit-code: '0'
+
     - name: Test Summary
       if: always()
       run: |
@@ -138,6 +154,7 @@ jobs:
         echo "Smoke Tests: ${{ steps.smoke_tests.outcome }}"
         echo "Integration Tests: ${{ steps.integration_tests.outcome }}"
         echo "BATS Tests: ${{ steps.bats_tests.outcome }}"
+
     - name: Clean up
       if: always()
       run: |
@@ -159,46 +176,107 @@ jobs:
         git diff --name-only HEAD^ HEAD > changed_files.txt
         echo "Changed files:"
         cat changed_files.txt
-        # Improved recursive detection for config files
-        if grep -qE '^(Dockerfile|config/|config/.*|entrypoint\.sh|init-config\.sh)' changed_files.txt; then
+        if grep -qE '^(Dockerfile|config/|entrypoint\.sh)' changed_files.txt; then
           echo "changed=true" >> $GITHUB_OUTPUT
         else
           echo "changed=false" >> $GITHUB_OUTPUT
         fi
 
-  build-and-push:
+  # Strategy 1: Build architectures in parallel, then combine
+  build-amd64:
     needs: [build-and-test, check-changes]
-    if: >
-      (needs.check-changes.outputs.files_changed == 'true')
-      && (github.event_name == 'push' || github.event_name == 'pull_request')
-      && github.ref == 'refs/heads/main'
+    if: needs.check-changes.outputs.files_changed == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
     steps:
     - uses: actions/checkout@v6
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Generate unique tag
-      id: tags
-      run: |
-        SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-        VERSION_TAG="build-${SHORT_SHA}"
-        echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
-        echo "build_tag=${VERSION_TAG}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-    - name: Build and push
+
+    - name: Build and push AMD64
       uses: docker/build-push-action@v6
       with:
         context: .
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
-        tags: |
-          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest
-          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:${{ steps.tags.outputs.build_tag }}
+        tags: ${{ secrets.DOCKERHUB_DOCKER_NAME }}:amd64-${{ github.sha }}
+        # Multi-layer caching strategy
+        cache-from: |
+          type=registry,ref=${{ secrets.DOCKERHUB_DOCKER_NAME }}:buildcache-amd64
+          type=gha,scope=amd64
+        cache-to: |
+          type=registry,ref=${{ secrets.DOCKERHUB_DOCKER_NAME }}:buildcache-amd64,mode=max
+          type=gha,mode=max,scope=amd64
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+  build-arm64:
+    needs: [build-and-test, check-changes]
+    if: needs.check-changes.outputs.files_changed == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push ARM64
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/arm64
+        push: true
+        tags: ${{ secrets.DOCKERHUB_DOCKER_NAME }}:arm64-${{ github.sha }}
+        # Multi-layer caching strategy
+        cache-from: |
+          type=registry,ref=${{ secrets.DOCKERHUB_DOCKER_NAME }}:buildcache-arm64
+          type=gha,scope=arm64
+        cache-to: |
+          type=registry,ref=${{ secrets.DOCKERHUB_DOCKER_NAME }}:buildcache-arm64,mode=max
+          type=gha,mode=max,scope=arm64
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+  # Combine multi-arch manifest
+  create-manifest:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Create and push multi-arch manifest
+      run: |
+        SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+
+        # Create manifest for :latest
+        docker buildx imagetools create -t ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest \
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:amd64-${{ github.sha }} \
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:arm64-${{ github.sha }}
+
+        # Create manifest for :build-SHA
+        docker buildx imagetools create -t ${{ secrets.DOCKERHUB_DOCKER_NAME }}:build-${SHORT_SHA} \
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:amd64-${{ github.sha }} \
+          ${{ secrets.DOCKERHUB_DOCKER_NAME }}:arm64-${{ github.sha }}
+
+        echo "Multi-arch images created:"
+        echo "  ${{ secrets.DOCKERHUB_DOCKER_NAME }}:latest"
+        echo "  ${{ secrets.DOCKERHUB_DOCKER_NAME }}:build-${SHORT_SHA}"
