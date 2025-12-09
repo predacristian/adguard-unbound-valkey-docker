@@ -16,20 +16,19 @@ A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Va
 
 ## Features
 
-- 🔒 **Automatic credential generation** - Random passwords on first run
-- 🧪 **Comprehensive testing** - Smoke, integration, and BATS tests
-- 🛡️ **Security scanning** - Trivy vulnerability + Gitleaks secret detection
-- ⚡ **Optimized CI/CD** - Parallel multi-arch builds (40-84% faster)
-- 🪝 **Pre-commit hooks** - Automated code quality checks
-- 🤖 **Automated releases** - Semantic versioning with auto-generated changelogs
-- 🔄 **Dependency automation** - Renovate auto-merges safe updates
-- 🐳 **Docker Compose** - Simple orchestration with Makefile
-- 📦 **DNS caching** - Valkey backend with Unix socket
-- 🚫 **Ad blocking** - Custom filtering through AdGuard Home
-- 🔐 **DNS over TLS (DoT)** - Secure DNS resolution
-- 🎯 **DNSSEC validation** - Enhanced security
+- Automated credential generation on first run
+- Smoke, integration, and BATS testing
+- Vulnerability scanning (Trivy, Gitleaks)
+- Parallel multi-arch builds (amd64, arm64)
+- Pre-commit hooks (shellcheck, hadolint, secrets detection)
+- Semantic versioning with automated releases
+- Automated dependency updates via Renovate
+- DNS caching via Valkey
+- Network-wide ad blocking
+- DNS over TLS upstream
+- DNSSEC validation enabled
 
-## Quick Start 🚀
+## Quick Start
 
 ### Using Docker Compose (Recommended)
 
@@ -75,24 +74,20 @@ docker run -d \
   ghcr.io/yourusername/repo:v1.2.3
 ```
 
-> **Note:** Replace `yourusername/repo` with your actual repository path. See [releases](https://github.com/yourusername/repo/releases) for available versions.
+Replace `yourusername/repo` with your repository path. Check releases for available versions.
 
-## Security & Access 🔐
+## Security & Access
 
 ### AdGuard Home Web Interface
 
 **Access:** `http://localhost:3000`
 
 **First Run Credentials:**
-- ✅ **Random password automatically generated**
-- ✅ Displayed in container logs
-- ✅ Saved to `/config/AdGuardHome/.credentials`
+Random password generated automatically and saved to `/config/AdGuardHome/.credentials`
 
 ```bash
 # View credentials
 docker logs dns-stack | grep "Password:"
-# or
-make logs
 ```
 
 **Custom Password (Recommended):**
@@ -114,7 +109,7 @@ environment:
 | 3000 | TCP | AdGuard Home UI |
 | 8443 | TCP | HTTPS (when TLS enabled) |
 
-## Configuration ⚙️
+## Configuration
 
 ### Directory Structure
 
@@ -140,7 +135,7 @@ Default configurations are copied on first run.
 - `ADGUARD_VERSION` - AdGuard Home version (default: `v0.107.71`)
 - `VALKEY_VERSION` - Valkey version (default: `9.0.0`)
 
-## Testing 🧪
+## Testing
 
 Comprehensive test suite with smoke, integration, and structured BATS tests:
 
@@ -155,19 +150,19 @@ make test-e2e          # End-to-end query path
 
 ### Test Coverage
 
-- ✅ Service health checks
-- ✅ DNS resolution (A, AAAA, MX, TXT records)
-- ✅ Unbound → Valkey caching via Unix socket
-- ✅ AdGuard → Unbound forwarding
-- ✅ Ad blocking functionality
-- ✅ DNSSEC validation
-- ✅ DNS-over-TLS configuration
-- ✅ Cache performance
-- ✅ Reverse DNS lookups
+- Service health checks
+- DNS resolution (A, AAAA, MX, TXT records)
+- Unbound → Valkey caching via Unix socket
+- AdGuard → Unbound forwarding
+- Ad blocking functionality
+- DNSSEC validation
+- DNS-over-TLS configuration
+- Cache performance
+- Reverse DNS lookups
 
 See [tests/README.md](tests/README.md) for details.
 
-## Development 🛠️
+## Development
 
 ### Building Locally
 
@@ -231,7 +226,7 @@ Automated security scanning on every push and daily:
 
 View reports: **Repository → Security tab**
 
-## CI/CD ⚡
+## CI/CD
 
 Optimized multi-architecture build pipeline:
 
@@ -245,11 +240,11 @@ Optimized multi-architecture build pipeline:
 
 ### Features
 
-- ⚡ **Parallel architecture builds** (amd64 + arm64 simultaneously)
-- 🎯 **Fast testing** (amd64 only - 5-7 min)
-- 💾 **Dual-layer caching** (Registry + GitHub Actions)
-- 🎨 **Smart triggers** (skip docs-only changes)
-- 🏗️ **Multi-arch support** (linux/amd64, linux/arm64)
+- Parallel architecture builds (amd64 + arm64 simultaneously)
+- Fast testing (amd64 only, 5-7 min)
+- Dual-layer caching (Registry + GitHub Actions)
+- Smart triggers (skip docs-only changes)
+- Multi-arch support (linux/amd64, linux/arm64)
 
 See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
 
@@ -389,12 +384,8 @@ BREAKING CHANGE: Config files moved to new location"
 
 Releases are automatically created when commits are merged to `main`.
 
-## License
-
-[Your License]
-
 ## Support
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/repo/issues)
-- 📖 **Documentation**: See docs above
-- 🔒 **Security**: View Security tab for vulnerability reports
+- Issues: [GitHub Issues](https://github.com/yourusername/repo/issues)
+- Documentation: See docs above
+- Security: View Security tab for vulnerability reports

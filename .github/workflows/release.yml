@@ -52,7 +52,7 @@ jobs:
       - name: Summary
         if: steps.semantic.outputs.new_release_published == 'true'
         run: |
-          echo "### :rocket: New Release Published" >> $GITHUB_STEP_SUMMARY
+          echo "### New Release Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** \`${{ steps.semantic.outputs.new_release_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -172,7 +172,7 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### :whale: Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Images Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** \`v${{ needs.release.outputs.new_release_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
