@@ -24,6 +24,7 @@ Thumbs.db
 # Ignore backup files
 *.bak
 *.backup
+*.original
 
 # Ignore Docker and CI/CD files
 .github/copilot-instructions.md
@@ -43,3 +44,6 @@ private/
 
 # Ignore git itself
 .git/
+
+# Ignore local data directory (docker-compose volumes)
+data/

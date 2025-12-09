@@ -1,5 +1,8 @@
+# Pin Alpine for reproducible builds; Renovate will manage ALPINE_VERSION updates via .github/renovate.json
+ARG ALPINE_VERSION="3.23.0"
+
 # Stage 1: builder
-FROM alpine:3.23.0 AS builder
+FROM alpine:${ALPINE_VERSION} AS builder
 
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.71"
@@ -38,18 +41,32 @@ RUN wget https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.g
         make install) && \
     rm -rf unbound-latest* unbound-checksum unbound-${UNBOUND_VERSION}.tar.gz* /var/cache/apk/*
 
+# Valkey build and versioning notes:
+# - Renovate updates ARG VALKEY_VERSION via .github/renovate.json (tracks valkey-io/valkey GitHub releases).
+# - The Docker build clones the repository at the specified tag: `git clone --branch ${VALKEY_VERSION} --depth 1`.
+#   This checks out the release tag (e.g. "9.0.0") and is compatible with Renovate's ARG updates.
+# - For stronger reproducibility you can:
+#     * Pin to a specific commit SHA in addition to the tag, or
+#     * Download release tarballs (from GitHub releases) and verify checksums before building.
+# - To record/verify the exact commit being built, we capture the checked-out commit hash.
 RUN git clone --branch ${VALKEY_VERSION} --depth 1 https://github.com/valkey-io/valkey.git /tmp/valkey && \
     cd /tmp/valkey && \
+    git rev-parse --short HEAD > /tmp/valkey-commit && \
     make BUILD_TLS=yes && \
     make install && \
     rm -rf /tmp/valkey
 
+# Download AdGuard Home and verify SHA256 checksum from the same GitHub release.
 RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
+    wget -O /tmp/adguard-checksums.txt "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/checksums.txt" && \
+    # Extract the checksum for the linux amd64 tarball and verify the downloaded file
+    grep 'AdGuardHome_linux_amd64.tar.gz' /tmp/adguard-checksums.txt | awk '{print $1 "  /tmp/AdGuardHome.tar.gz"}' > /tmp/adguard-checksum && \
+    sha256sum -c /tmp/adguard-checksum && \
     tar -xzf /tmp/AdGuardHome.tar.gz -C /opt && \
-    rm /tmp/AdGuardHome.tar.gz
+    rm -f /tmp/AdGuardHome.tar.gz /tmp/adguard-checksums.txt /tmp/adguard-checksum
 
 # Stage 2: final
-FROM alpine:latest
+FROM alpine:${ALPINE_VERSION}
 
 ENV ADGUARD_PATH="/opt/AdGuardHome"
 ENV ENTRYPOINT_PATH="/usr/local/bin/entrypoint.sh"
@@ -62,7 +79,11 @@ RUN apk update && \
         curl \
         unbound \
         bind-tools \
-        shadow && \
+        shadow \
+        bats \
+        bash \
+        apache2-utils \
+        openssl && \
     mkdir -p /var/lib/valkey
 
 COPY config/ ${CONFIG_DEFAULT_PATH}
@@ -81,5 +102,14 @@ RUN chmod +x ${ADGUARD_PATH}/AdGuardHome && \
     chown -R root:root ${ADGUARD_PATH}
 
 EXPOSE 53/tcp 53/udp 853/tcp 3000/tcp 443/tcp
+
+# Healthcheck: verify Unbound, Valkey, and AdGuard are responding.
+# - Unbound: dig against local resolver on port 5335
+# - Valkey: ping via unix socket
+# - AdGuard Home: HTTP check against management UI (port 3000)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 CMD sh -c '\
+    dig +short @127.0.0.1 -p 5335 example.com | grep -q . && \
+    /usr/local/bin/valkey-cli -s /tmp/valkey.sock ping >/dev/null 2>&1 && \
+    curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
