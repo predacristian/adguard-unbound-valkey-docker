@@ -100,7 +100,57 @@ environment:
 
 ⚠️ **Security:** Random passwords are generated if `ADGUARD_PASSWORD` is not set. Default `admin/admin` only used as fallback.
 
-## Default Ports
+## Quick Start 🚀
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Clone and start
+git clone <repo-url>
+cd adguard-unbound-valkey-docker
+make up
+
+# View logs and credentials
+make logs
+
+# Run tests
+make test
+
+# Stop
+make down
+```
+
+### Using Docker
+
+```bash
+docker run -d \
+  --name dns-stack \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -p 853:853/tcp \
+  -p 3000:3000/tcp \
+  -e ADGUARD_PASSWORD=YourSecurePassword123 \
+  -v ./config:/config \
+  dns-stack
+```
+
+## Security & Access 🔐
+
+### AdGuard Home Web Interface
+
+**Access:** `http://localhost:3000`
+
+**First Run Credentials:**
+- ✅ **Random password automatically generated**
+- ✅ Displayed in container logs
+- ✅ Saved to `/config/AdGuardHome/.credentials`
+
+```bash
+# View credentials
+docker logs dns-stack | grep "Password:"
+# or
+make logs
+```
 
 | Port | Protocol | Service |
 |------|----------|---------|
