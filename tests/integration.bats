@@ -11,35 +11,27 @@
 }
 
 @test "Unbound caches DNS queries in Valkey" {
-    # Clear cache
     run valkey-cli -s /tmp/valkey.sock FLUSHALL
     [ "$status" -eq 0 ]
 
-    # Verify cache is empty (DBSIZE returns just the number)
     run valkey-cli -s /tmp/valkey.sock DBSIZE
     [ "$output" = "(integer) 0" ] || [ "$output" = "0" ]
 
-    # Make DNS query through Unbound
     run dig @127.0.0.1 -p 5335 +short example.com
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 
-    # Wait for cache write (async operation)
     sleep 3
 
-    # Note: Query may stay in Unbound's memory cache and not reach Valkey
-    # This is normal behavior - cachedb is for overflow/persistence
-    # Test just verifies the query succeeded and cache is accessible
+    # Note: Query may stay in Unbound's memory cache (normal behavior)
+    # cachedb is for overflow/persistence, not all queries reach Valkey
     run valkey-cli -s /tmp/valkey.sock DBSIZE
     [ "$status" -eq 0 ]
-    # Cache may be populated or empty (both are valid)
 }
 
 @test "Cache hits improve query performance" {
-    # Clear cache for clean test
     valkey-cli -s /tmp/valkey.sock FLUSHALL
 
-    # First query (cache miss)
     start_time=$(date +%s%N)
     dig @127.0.0.1 -p 5335 +short google.com > /dev/null
     end_time=$(date +%s%N)
@@ -47,13 +39,11 @@
 
     sleep 1
 
-    # Second query (cache hit)
     start_time=$(date +%s%N)
     dig @127.0.0.1 -p 5335 +short google.com > /dev/null
     end_time=$(date +%s%N)
     duration_hit=$((($end_time - $start_time)/1000000))
 
-    # Both should complete in reasonable time
     [ $duration_miss -lt 5000 ]
     [ $duration_hit -lt 5000 ]
 }
@@ -72,10 +62,8 @@
 }
 
 @test "AdGuard forwards queries to Unbound (verified by cache)" {
-    # Clear cache
     valkey-cli -s /tmp/valkey.sock FLUSHALL
 
-    # Query through AdGuard
     run dig @127.0.0.1 -p 53 +short example.com
     [ "$status" -eq 0 ]
 

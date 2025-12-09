@@ -55,7 +55,6 @@ wait_for_service() {
 validate_configs() {
     log "Validating configs..."
 
-    # Check if symbolic link exists and target is readable
     if [ ! -L "/usr/local/etc/unbound/unbound.conf" ]; then
         log_error "Unbound config symlink not found"
         return 1
@@ -66,19 +65,16 @@ validate_configs() {
         return 1
     fi
 
-    # Check Unbound config
     if ! unbound-checkconf /usr/local/etc/unbound/unbound.conf; then
         log_error "Unbound config validation failed"
         return 1
     fi
 
-    # Check AdGuard Home config exists
     if [ ! -f "/config/AdGuardHome/AdGuardHome.yaml" ]; then
         log_error "AdGuard config not found"
         return 1
     fi
 
-    # Check Valkey config file exists and is readable
     if [ ! -f "/config/valkey/valkey.conf" ]; then
         log_error "Valkey config not found"
         return 1
@@ -144,17 +140,14 @@ setup_adguard_credentials() {
     local config_file="/config/AdGuardHome/AdGuardHome.yaml"
     local credentials_file="/config/AdGuardHome/.credentials"
 
-    # Check if credentials already configured
     if [ -f "$credentials_file" ]; then
         log "Credentials already configured"
         return 0
     fi
 
-    # Determine username and password
     local username="${ADGUARD_USERNAME:-admin}"
     local password="${ADGUARD_PASSWORD:-}"
 
-    # Generate random password if not provided
     if [ -z "$password" ]; then
         password=$(openssl rand -base64 16 | tr -d '/+=' | cut -c1-16)
         log "Generated random password for AdGuard Home"
@@ -162,13 +155,10 @@ setup_adguard_credentials() {
         log "Using provided ADGUARD_PASSWORD"
     fi
 
-    # Hash the password using AdGuard Home's built-in hasher
-    # Note: AdGuard uses bcrypt, we'll use htpasswd as a fallback
     local password_hash
     if command -v htpasswd >/dev/null 2>&1; then
         password_hash=$(htpasswd -nbB "$username" "$password" | cut -d: -f2)
     else
-        # Fallback: use the provided password as-is and let AdGuard handle it
         log "WARNING: htpasswd not available, using AdGuard's default hashing"
         password_hash='$2y$10$TJbQGpmgYZQ34WP3WjGoC.6Ibg40RnajD6OpLnV9xlfBCDZaS7L3y'
         password="admin"
@@ -176,14 +166,11 @@ setup_adguard_credentials() {
         log "SECURITY: Set ADGUARD_PASSWORD environment variable to use custom password"
     fi
 
-    # Update config file with new credentials
     if [ -f "$config_file" ]; then
-        # Replace the username and password in the YAML
         sed -i "s/name: .*/name: $username/" "$config_file"
         sed -i "s|password: .*|password: $password_hash|" "$config_file"
     fi
 
-    # Save credentials for reference (only if not using default)
     if [ "$password" != "admin" ]; then
         cat > "$credentials_file" <<EOF
 # AdGuard Home Credentials
