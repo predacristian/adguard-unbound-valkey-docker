@@ -1,4 +1,4 @@
-# DNS Stack
+# DNS Stack: Unbound + AdGuard Home + Valkey
 
 ![CI/CD Status](https://img.shields.io/badge/CI%2FCD-Optimized-brightgreen)
 ![Security Scanning](https://img.shields.io/badge/Security-Trivy%20%2B%20Gitleaks-blue)
@@ -6,406 +6,316 @@
 ![Semantic Release](https://img.shields.io/badge/semantic--release-automated-e10079)
 ![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow)
 
-A secure, containerized DNS solution combining Unbound DNS, AdGuard Home, and Valkey for efficient DNS resolution, caching, and ad blocking.
+DNS resolver with ad blocking and persistent caching in a single Docker container.
 
-## Components
+## What This Does
 
-- **Unbound DNS**: Validating, recursive, and caching DNS resolver
-- **AdGuard Home**: Network-wide ads & tracking blocking DNS server
-- **Valkey**: Lightweight in-memory cache for Unbound DNS
+- Blocks ads and trackers at DNS level
+- Validates DNSSEC signatures
+- Caches DNS queries using Valkey for faster lookups
+- Encrypts upstream DNS queries (DNS over TLS)
+- Web interface for management
 
-## Features
+## Architecture
 
-- Automated credential generation on first run
-- Smoke, integration, and BATS testing
-- Vulnerability scanning (Trivy, Gitleaks)
-- Parallel multi-arch builds (amd64, arm64)
-- Pre-commit hooks (shellcheck, hadolint, secrets detection)
-- Semantic versioning with automated releases
-- Automated dependency updates via Renovate
-- DNS caching via Valkey
-- Network-wide ad blocking
-- DNS over TLS upstream
-- DNSSEC validation enabled
+```
+DNS Client (your device)
+        │
+        ▼
+AdGuard Home (port 53)
+  • Blocks ads/trackers
+  • Web UI (port 3000)
+        │
+        ▼
+Unbound DNS (port 5335)
+  • DNSSEC validation
+  • Recursive resolution
+  • 384MB memory cache
+        │
+        ├──► Cloudflare DNS (1.1.1.1) via DoT
+        └──► Valkey Cache (Unix socket)
+             • Persistent storage
+             • 8MB cache
+```
 
 ## Quick Start
 
-### Using Docker Compose (Recommended)
+### Requirements
+
+- Docker 20.10+
+- Docker Compose 2.0+
+- 512MB RAM minimum
+
+### Start the Stack
 
 ```bash
-# Clone and start
-git clone <repo-url>
+# Clone repo
+git clone https://github.com/yourusername/adguard-unbound-valkey-docker.git
 cd adguard-unbound-valkey-docker
+
+# Start services
 make up
 
-# View logs and credentials
-make logs
+# Get password (auto-generated)
+make logs | grep "Password:"
 
-# Run tests
-make test
-
-# Stop
-make down
+# Access web UI
+open http://localhost:3000
 ```
 
-### Using Docker
+Default login: `admin` / (password from logs)
 
-```bash
-# Use latest version
-docker run -d \
-  --name dns-stack \
-  -p 53:53/tcp \
-  -p 53:53/udp \
-  -p 853:853/tcp \
-  -p 3000:3000/tcp \
-  -e ADGUARD_PASSWORD=YourSecurePassword123 \
-  -v ./config:/config \
-  ghcr.io/yourusername/repo:latest
+### Configure Devices
 
-# Pin to specific version (recommended for production)
-docker run -d \
-  --name dns-stack \
-  -p 53:53/tcp \
-  -p 53:53/udp \
-  -p 853:853/tcp \
-  -p 3000:3000/tcp \
-  -e ADGUARD_PASSWORD=YourSecurePassword123 \
-  -v ./config:/config \
-  ghcr.io/yourusername/repo:v1.2.3
-```
+Point your devices DNS to your host machine's IP address on port 53.
 
-Replace `yourusername/repo` with your repository path. Check releases for available versions.
+## Ports
 
-## Security & Access
-
-### AdGuard Home Web Interface
-
-**Access:** `http://localhost:3000`
-
-**First Run Credentials:**
-Random password generated automatically and saved to `/config/AdGuardHome/.credentials`
-
-```bash
-# View credentials
-docker logs dns-stack | grep "Password:"
-```
-
-**Custom Password (Recommended):**
-```yaml
-# docker-compose.yml
-environment:
-  ADGUARD_PASSWORD: "YourSecurePassword123"
-  ADGUARD_USERNAME: "admin"  # optional
-```
-
-⚠️ **Security:** Random passwords are generated if `ADGUARD_PASSWORD` is not set. Default `admin/admin` only used as fallback.
-
-## Quick Start 🚀
-
-### Using Docker Compose (Recommended)
-
-```bash
-# Clone and start
-git clone <repo-url>
-cd adguard-unbound-valkey-docker
-make up
-
-# View logs and credentials
-make logs
-
-# Run tests
-make test
-
-# Stop
-make down
-```
-
-### Using Docker
-
-```bash
-docker run -d \
-  --name dns-stack \
-  -p 53:53/tcp \
-  -p 53:53/udp \
-  -p 853:853/tcp \
-  -p 3000:3000/tcp \
-  -e ADGUARD_PASSWORD=YourSecurePassword123 \
-  -v ./config:/config \
-  dns-stack
-```
-
-## Security & Access 🔐
-
-### AdGuard Home Web Interface
-
-**Access:** `http://localhost:3000`
-
-**First Run Credentials:**
-- ✅ **Random password automatically generated**
-- ✅ Displayed in container logs
-- ✅ Saved to `/config/AdGuardHome/.credentials`
-
-```bash
-# View credentials
-docker logs dns-stack | grep "Password:"
-# or
-make logs
-```
-
-| Port | Protocol | Service |
-|------|----------|---------|
-| 53 | TCP/UDP | DNS |
-| 853 | TCP | DNS-over-TLS |
-| 3000 | TCP | AdGuard Home UI |
-| 8443 | TCP | HTTPS (when TLS enabled) |
+| Port | Service |
+|------|---------|
+| 53 | DNS (TCP/UDP) |
+| 853 | DNS-over-TLS |
+| 3000 | AdGuard Web UI |
+| 8443 | HTTPS (when enabled) |
 
 ## Configuration
 
 ### Directory Structure
 
 ```
-/config/
-├── unbound/         # Unbound DNS configuration
-├── AdGuardHome/     # AdGuard Home configuration
-└── valkey/          # Valkey cache configuration
+data/config/
+├── AdGuardHome/
+│   ├── AdGuardHome.yaml
+│   └── .credentials
+├── unbound/
+│   ├── unbound.conf
+│   └── unbound.conf.d/
+└── valkey/
+    └── valkey.conf
 ```
-
-Default configurations are copied on first run.
 
 ### Environment Variables
 
-**Runtime:**
-- `ADGUARD_PASSWORD` - Custom password for AdGuard Home
-- `ADGUARD_USERNAME` - Custom username (default: `admin`)
-- `TZ` - Timezone (default: `UTC`)
+Edit `docker-compose.yml`:
 
-**Build Arguments:**
-- `ALPINE_VERSION` - Alpine Linux version (default: `3.23.0`)
-- `UNBOUND_VERSION` - Unbound DNS version (default: `1.23.1`)
-- `ADGUARD_VERSION` - AdGuard Home version (default: `v0.107.71`)
-- `VALKEY_VERSION` - Valkey version (default: `9.0.0`)
-
-## Testing
-
-Comprehensive test suite with smoke, integration, and structured BATS tests:
-
-```bash
-make test              # Full test suite
-make test-smoke        # Quick smoke tests (Unbound, Valkey, AdGuard)
-make test-integration  # Integration tests (caching, E2E, ad blocking)
-make test-bats         # BATS structured tests (15 tests)
-make test-cache        # Cache integration test
-make test-e2e          # End-to-end query path
+```yaml
+environment:
+  TZ: "America/New_York"
+  ADGUARD_PASSWORD: "YourPassword"
+  ADGUARD_USERNAME: "admin"
 ```
 
-### Test Coverage
+### Password Management
 
-- Service health checks
-- DNS resolution (A, AAAA, MX, TXT records)
-- Unbound → Valkey caching via Unix socket
-- AdGuard → Unbound forwarding
-- Ad blocking functionality
-- DNSSEC validation
-- DNS-over-TLS configuration
-- Cache performance
-- Reverse DNS lookups
+**Auto-generated:**
+- Random password if `ADGUARD_PASSWORD` not set
+- Shown in logs on first run
+- Saved to `.credentials` file
 
-See [tests/README.md](tests/README.md) for details.
-
-## Development
-
-### Building Locally
-
+**Reset password:**
 ```bash
-docker build -t dns-stack .
-# or
-make build
+make down
+rm ./data/config/AdGuardHome/.credentials
+make up
 ```
+
+## Usage
 
 ### Makefile Commands
 
 ```bash
-make up              # Start DNS stack
-make down            # Stop DNS stack
-make logs            # View logs (follow mode)
-make build           # Build Docker image
-make test            # Run all tests
-make clean           # Remove containers and volumes
-make status          # Show container status
-make health          # Check health status
-make shell           # Open shell in container
+make up           # Start stack
+make down         # Stop stack
+make restart      # Restart services
+make logs         # View logs
+make status       # Container status
+make health       # Health check
+make shell        # Open shell
 ```
+
+### Testing DNS
+
+```bash
+# Test DNS resolution
+dig @localhost example.com
+
+# Test AAAA record
+dig @localhost AAAA example.com
+
+# Check if ads are blocked
+dig @localhost ads.example.com
+```
+
+### Monitoring Services
+
+```bash
+# Check health
+make health
+
+# Watch logs
+make logs
+
+# Inside container
+make shell
+unbound-control status
+valkey-cli -s /tmp/valkey.sock PING
+```
+
+## Testing
+
+Full test suite included:
+
+```bash
+make test              # All tests (~3 min)
+make test-smoke        # Quick health checks (~30s)
+make test-integration  # Component integration (~90s)
+make test-cache        # Cache functionality
+make test-e2e          # End-to-end queries
+```
+
+See [tests/README.md](tests/README.md) for details.
+
+## Building
+
+```bash
+# Build image
+make build
+
+# Build without cache
+make rebuild
+
+# Custom versions
+docker build \
+  --build-arg UNBOUND_VERSION=1.23.1 \
+  --build-arg ADGUARD_VERSION=v0.107.71 \
+  -t dns-stack:custom .
+```
+
+## Development
 
 ### Pre-commit Hooks
 
-Automated code quality checks on every commit:
-
 ```bash
-# One-time setup
 pip install pre-commit
 pre-commit install
-
-# Manual run
-pre-commit run --all-files
 ```
 
-**Checks:**
-- ShellCheck (shell script linting)
-- Hadolint (Dockerfile linting)
-- detect-secrets (secret scanning)
-- YAML validation
-- Markdown formatting
-- Trailing whitespace
+Includes: shellcheck, hadolint, secret detection, YAML validation
 
-See [.github/SETUP_PRECOMMIT.md](.github/SETUP_PRECOMMIT.md) for setup guide.
+### Commit Format
 
-### Security Scanning
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
-Automated security scanning on every push and daily:
+```bash
+git commit -m "feat: add new feature"
+git commit -m "fix: correct bug"
+git commit -m "docs: update readme"
+```
 
-**Trivy** - Container vulnerability scanning
-- OS package vulnerabilities
-- Application dependencies
-- CRITICAL/HIGH/MEDIUM severity
-- Results in GitHub Security tab
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
 
-**Gitleaks** - Secret detection
-- Scans entire git history
-- API keys, passwords, tokens
-- Private keys, credentials
+### Making Changes
 
-View reports: **Repository → Security tab**
+1. Create branch: `git checkout -b feature/name`
+2. Make changes
+3. Test: `make rebuild && make test`
+4. Commit and push
+5. Create PR
 
 ## CI/CD
 
-Optimized multi-architecture build pipeline:
+GitHub Actions workflows:
+- **ci-cd.yml**: Build multi-arch images, run tests, push to GHCR
+- **security.yml**: Trivy + Gitleaks scanning
+- **release.yml**: Semantic versioning and releases
 
-### Performance
+Releases created automatically on merge to `main`.
 
-| Scenario | Before | After | Improvement |
-|----------|--------|-------|-------------|
-| Pull Request | 45 min | 7 min | **84% faster** |
-| Push to main (cold) | 47 min | 28 min | **40% faster** |
-| Push to main (warm) | 39 min | 15 min | **62% faster** |
+## Security
 
-### Features
+### Scanning
 
-- Parallel architecture builds (amd64 + arm64 simultaneously)
-- Fast testing (amd64 only, 5-7 min)
-- Dual-layer caching (Registry + GitHub Actions)
-- Smart triggers (skip docs-only changes)
-- Multi-arch support (linux/amd64, linux/arm64)
+- **Trivy**: Container vulnerability scanning
+- **Gitleaks**: Secret detection in git history
 
-See [.github/CI_CD_QUICK_START.md](.github/CI_CD_QUICK_START.md) for details.
+Results: Repository → Security tab
 
-## Architecture
+### Recommendations
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   DNS Client                        │
-└──────────────────────┬──────────────────────────────┘
-                       │ Port 53
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│               AdGuard Home                           │
-│  • Ad blocking & filtering                           │
-│  • Web UI (port 3000)                                │
-└──────────────────────┬───────────────────────────────┘
-                       │ Port 5335
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│               Unbound DNS                            │
-│  • DNSSEC validation                                 │
-│  • Recursive resolution                              │
-│  • Memory cache (384MB)                              │
-└──────────────────────┬───────────────────────────────┘
-                       │
-                       ├──► Cloudflare DNS (1.1.1.1)
-                       │    via DoT (port 853)
-                       │
-                       └──► Valkey Cache
-                            • Unix socket (/tmp/valkey.sock)
-                            • Persistent cache (8MB)
-                            • Overflow/persistence
-```
-
-## Recent Improvements
-
-### v2.0 - Security & Automation Release
-
-**Docker Compose + Makefile**
-- Simple orchestration with docker-compose.yml
-- Comprehensive Makefile with color-coded output
-- Easy testing and deployment commands
-
-**Comprehensive Testing**
-- Smoke tests (Unbound, Valkey, AdGuard)
-- Integration tests (cache, E2E, ad blocking, DoT)
-- BATS structured tests (15 tests with TAP output)
-- tests/README.md documentation
-
-**Security Enhancements**
-- Automatic random password generation (16-char, bcrypt)
-- Environment variable support (ADGUARD_PASSWORD)
-- Pre-commit hooks (shellcheck, hadolint, detect-secrets)
-- Trivy vulnerability scanning
-- Gitleaks secret detection
-- .secrets.baseline for false positive management
-
-**CI/CD Optimization**
-- Parallel multi-arch builds (40-84% faster)
-- amd64 + arm64 build simultaneously
-- Dual-layer caching (Registry + GHA)
-- Smart change detection
-- Optimized testing (amd64 only)
-
-**Configuration Improvements**
-- Healthcheck in Dockerfile
-- Improved Valkey configuration
-- Better entrypoint.sh error handling
-- .gitignore for data directory
+- Set custom password in `docker-compose.yml`
+- Use specific version tags (not `:latest`)
+- Keep images updated
+- Restrict web UI to localhost if needed:
+  ```yaml
+  ports:
+    - "127.0.0.1:3000:3000"
+  ```
 
 ## Troubleshooting
 
-### Can't login to AdGuard
+### Can't Login
 
 ```bash
-# Check credentials
+# Get password
 docker logs dns-stack | grep "Password:"
 
-# Or check file
-docker exec dns-stack cat /config/AdGuardHome/.credentials
+# Reset
+make down
+rm ./data/config/AdGuardHome/.credentials
+make up
 ```
 
-### Reset password
+### DNS Not Working
 
 ```bash
-docker exec dns-stack rm /config/AdGuardHome/.credentials
-docker restart dns-stack
-# New password will be generated
-```
-
-### View service status
-
-```bash
-make status
+# Check health
 make health
+
+# Test resolution
+dig @localhost example.com
+
+# Check logs
 make logs
 ```
 
-### Commit Message Format
+### Cache Issues
 
 ```bash
-# Feature
-git commit -m "feat: add Prometheus metrics endpoint"
-
-# Bug fix
-git commit -m "fix: correct Valkey socket permissions"
-
-# Breaking change
-git commit -m "feat!: change config structure
-
-BREAKING CHANGE: Config files moved to new location"
+make shell
+valkey-cli -s /tmp/valkey.sock PING
+valkey-cli -s /tmp/valkey.sock KEYS "*"
 ```
 
-Releases are automatically created when commits are merged to `main`.
+### Port 53 Conflict
+
+```bash
+# Check what's using port
+sudo lsof -i :53
+
+# Stop systemd-resolved
+sudo systemctl stop systemd-resolved
+sudo systemctl disable systemd-resolved
+```
+
+### Container Crashes
+
+```bash
+# View logs
+docker logs dns-stack
+```
+
+Common causes:
+- Insufficient memory (need 512MB+)
+- Port conflicts
+- Missing capabilities (NET_ADMIN, NET_BIND_SERVICE)
+
+## License
+
+MIT License
+
+## Acknowledgments
+
+- [Unbound DNS](https://nlnetlabs.nl/projects/unbound/)
+- [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)
+- [Valkey](https://github.com/valkey-io/valkey)
+- [Alpine Linux](https://alpinelinux.org/)
