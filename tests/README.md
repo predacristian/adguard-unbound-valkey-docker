@@ -1,85 +1,20 @@
 # DNS Stack Test Suite
 
-Comprehensive test suite for the DNS Stack (AdGuard + Unbound + Valkey) Docker container.
+Tests for the DNS Stack (AdGuard + Unbound + Valkey).
 
 ## Test Structure
 
 ```
 tests/
-├── README.md                      # This file
-├── test_unbound.sh                # Smoke tests for Unbound
-├── test_valkey.sh                 # Smoke tests for Valkey
-├── test_adguard.sh                # Smoke tests for AdGuard
-├── test_cache_integration.sh      # Cache integration tests (NEW!)
-├── test_e2e_query.sh              # End-to-end query path tests (NEW!)
-├── test_ad_blocking.sh            # Ad blocking functionality tests (NEW!)
-├── test_dot.sh                    # DNS over TLS tests (NEW!)
-└── integration.bats               # BATS integration test suite (NEW!)
+├── test_unbound.sh              # Unbound smoke tests
+├── test_valkey.sh               # Valkey smoke tests
+├── test_adguard.sh              # AdGuard smoke tests
+├── test_cache_integration.sh    # Cache functionality
+├── test_e2e_query.sh            # End-to-end query path
+├── test_ad_blocking.sh          # Ad blocking tests
+├── test_dot.sh                  # DNS over TLS tests
+└── integration.bats             # BATS test suite
 ```
-
-## Test Categories
-
-### Smoke Tests (Quick, 30s)
-Basic health and functionality checks for each service.
-
-**test_unbound.sh** - 6 tests
-- Process and port checks
-- Basic DNS resolution
-- DNSSEC validation
-- Reverse DNS
-- Response time
-
-**test_valkey.sh** - 5 tests
-- Process and port checks
-- Connection (PING/PONG)
-- Basic operations (SET/GET/EXISTS/DEL)
-- Response time
-
-**test_adguard.sh** - 4 tests
-- Process and port checks
-- Web interface accessibility
-- DNS resolution through AdGuard
-
-### Integration Tests (Comprehensive, 2min)
-Tests for integration between components and core functionality.
-
-**test_cache_integration.sh** - 7 tests (CRITICAL)
-- Unix socket exists and accessible
-- Socket permissions correct
-- Unbound actually caches in Valkey (THE KEY TEST!)
-- Cache hit performance
-- Cache data structure
-- Cache memory usage
-
-**test_e2e_query.sh** - 7 tests
-- AdGuard → Unbound forwarding
-- Unbound → Cloudflare forwarding
-- Full query path with caching
-- Multiple DNS record types (A, AAAA, MX, TXT)
-- Query timing (cache miss vs hit)
-
-**test_ad_blocking.sh** - 7 tests
-- Filtering enabled check
-- Known ad domains blocked
-- Legitimate domains allowed
-- Filter lists loaded
-- Statistics tracking
-- Multiple ad domain tests
-- DNSSEC not broken by blocking
-
-**test_dot.sh** - 6 tests
-- DoT port (853) listening
-- TLS connection tests (multiple methods)
-- Unbound DoT configuration
-- Upstream DoT status
-
-### BATS Tests (Structured, 1min)
-Automated test suite using BATS framework with better output.
-
-**integration.bats** - 17 tests
-- Combines key tests from all categories
-- TAP output format for CI integration
-- Better assertions and error messages
 
 ## Running Tests
 
@@ -88,166 +23,187 @@ Automated test suite using BATS framework with better output.
 Container must be running:
 ```bash
 make up
-# or
-docker-compose up -d
+# Wait 30-45 seconds for services to be healthy
+make status
 ```
 
-Wait for services to be healthy (~30-45 seconds)
-
-### Run All Tests
+### Quick Start
 
 ```bash
-# Full test suite (smoke + integration)
+# All tests
 make test
 
-# Quick smoke tests only
+# Smoke tests only (fast)
 make test-smoke
 
 # Integration tests only
 make test-integration
 
-# BATS tests only
+# BATS tests
 make test-bats
 ```
 
-### Run Individual Test Suites
+### Individual Tests
 
 ```bash
-# Smoke tests
-make test-unbound
-make test-valkey
-make test-adguard
-
-# Integration tests
-make test-cache          # Cache integration (MOST IMPORTANT!)
-make test-e2e            # End-to-end query path
+make test-unbound        # DNS resolution, DNSSEC
+make test-valkey         # Cache connectivity
+make test-adguard        # Web UI, DNS queries
+make test-cache          # Cache integration (important)
+make test-e2e            # Full query chain
 make test-ad-blocking    # Ad blocking functionality
-make test-dot            # DNS over TLS
 ```
 
-### Run Tests Manually
+## What Each Test Does
 
-```bash
-# Inside container
-docker exec dns-stack /tests/test_cache_integration.sh
+### Smoke Tests (30 seconds)
 
-# From host (if tests mounted)
-docker exec dns-stack bash -c "cd /tests && ./test_cache_integration.sh"
+Basic health checks for each service.
 
-# Run BATS
-docker exec dns-stack bats /tests/integration.bats
-```
-
-## Test Coverage
-
-### Tested
-
-**Core Functionality:**
-- DNS resolution (A, AAAA, MX, TXT records)
+**test_unbound.sh** - 6 tests
+- Process running
+- Port listening
+- DNS resolution works
 - DNSSEC validation
-- Reverse DNS (PTR records)
-- DNS over TLS port exposure
-- Ad blocking
-- Query forwarding chain
-- Cache integration (Unbound → Valkey)
-- Cache hit/miss behavior
-- Response time performance
+- Reverse DNS
+- Response time check
 
-**Service Health:**
-- Process running checks
-- Port availability
-- Web interface accessibility
-- Configuration validation
+**test_valkey.sh** - 5 tests
+- Process running
+- Unix socket exists
+- PING/PONG works
+- SET/GET/EXISTS/DEL operations
+- Response time check
 
-**Integration:**
+**test_adguard.sh** - 4 tests
+- Process running
+- Port listening
+- Web UI accessible
+- DNS resolution through AdGuard
+
+### Integration Tests (2 minutes)
+
+Tests for component interactions.
+
+**test_cache_integration.sh** - 7 tests
+- Unix socket exists
+- Socket permissions correct
+- Unbound caches in Valkey
+- Cache hit improves performance
+- Cache data structure valid
+- Cache memory usage
+
+**test_e2e_query.sh** - 7 tests
 - AdGuard → Unbound forwarding
-- Unbound → Valkey caching via Unix socket
-- Unbound → Cloudflare upstream
-- Full end-to-end query path
+- Unbound → Cloudflare forwarding
+- Full query path with caching
+- Multiple record types (A, AAAA, MX, TXT)
+- Query timing (cache miss vs hit)
 
-### Not Tested
+**test_ad_blocking.sh** - 7 tests
+- Filtering enabled
+- Known ad domains blocked
+- Legitimate domains allowed
+- Filter lists loaded
+- Statistics tracking
+- DNSSEC works with blocking
 
-- Load testing (concurrent queries)
-- Memory usage under load
-- Certificate management for DoT
-- IPv6 specific queries
-- Custom filter rules
-- AdGuard API authentication
-- Service restart/recovery
-- Configuration reload
-- Rate limiting enforcement
-- Security/penetration testing
+**test_dot.sh** - 6 tests
+- DoT port (853) listening
+- TLS connection tests
+- Unbound DoT configuration
+- Upstream DoT status
 
-## Test Results & Output
+### BATS Tests (1 minute)
 
-### Bash Scripts
-Standard output with timestamps and colored status:
+Structured test suite with TAP output format.
+
+**integration.bats** - 17 tests
+- Combines key tests from all categories
+- Better output format
+- Better assertions
+
+## Test Results
+
+**Bash scripts output:**
 ```
-[2025-12-09 00:00:00] Running cache integration tests...
-[2025-12-09 00:00:01] ✓ Socket exists at /tmp/valkey.sock
-[2025-12-09 00:00:02] ✓ Unbound is caching in Valkey (5 keys added)
+[2025-12-09 00:00:00] Running tests...
+[2025-12-09 00:00:01] ✓ Socket exists
+[2025-12-09 00:00:02] ✓ Cache working
 ```
 
-### BATS Output
-TAP (Test Anything Protocol) format:
+**BATS output (TAP format):**
 ```
 1..17
-ok 1 Valkey Unix socket exists and is accessible
-ok 2 Unbound caches DNS queries in Valkey
-ok 3 Cache hits improve query performance
-...
+ok 1 Valkey socket accessible
+ok 2 Unbound caches in Valkey
+ok 3 Cache improves performance
 ```
 
-## CI/CD Integration
+## What Gets Tested
 
-Tests are automatically run in GitHub Actions on:
-- Pull requests to main
-- Pushes to main
-- Manual workflow dispatch
+**Working:**
+- DNS resolution (all record types)
+- DNSSEC validation
+- Reverse DNS
+- Query forwarding chain
+- Unbound → Valkey caching
+- Ad blocking
+- Cache hit/miss behavior
+- Response times
 
-Workflow runs:
-1. Smoke tests (fast verification)
-2. Integration tests (comprehensive)
-3. BATS tests (structured validation)
+**Not tested:**
+- Load testing
+- IPv6 queries
+- Certificate management
+- Service recovery
+- Rate limiting
 
 ## Troubleshooting
 
-### Test Failures
+### "Valkey socket not found"
 
-**"Valkey Unix socket not found"**
-- Check entrypoint.sh started Valkey correctly
-- Verify socket permissions (should be 770)
-- Check Valkey config has `unixsocket /tmp/valkey.sock`
-
-**"No cache entries after DNS query"**
-- Most critical failure - means caching is broken!
-- Check unbound.conf has `cachedb:` module
-- Verify Unbound can write to Valkey socket
-- Check Valkey is running and accessible
-
-**"Ad domains not blocked"**
-- Check AdGuard protection is enabled
-- Verify filter lists are loaded
-- May be expected if filters don't include that domain
-
-**"DoT tests skipped"**
-- Expected - DoT requires TLS certificate configuration
-- Port 853 is exposed but TLS not configured by default
-
-### Debug Mode
-
-Run tests with debug output:
+Check entrypoint started Valkey:
 ```bash
-# Enable debug logging in scripts
+make logs
+docker exec dns-stack ls -la /tmp/valkey.sock
+```
+
+### "No cache entries after query"
+
+This means caching is broken:
+```bash
+# Check Valkey running
+docker exec dns-stack valkey-cli -s /tmp/valkey.sock PING
+
+# Check Unbound config
+docker exec dns-stack grep -r cachedb /config/unbound/
+```
+
+### "Ad domains not blocked"
+
+Check AdGuard protection enabled:
+```bash
+docker exec dns-stack curl -s http://localhost:3000/control/status | grep protection_enabled
+```
+
+### "DoT tests skipped"
+
+Expected - DoT requires TLS certificate configuration. Port 853 is exposed but TLS not configured by default.
+
+## Debug Mode
+
+```bash
+# Enable debug in scripts
 DEBUG=1 docker exec dns-stack /tests/test_cache_integration.sh
 
-# Check Valkey directly
+# Check Valkey
 docker exec dns-stack valkey-cli -s /tmp/valkey.sock INFO
 
 # Check Unbound stats
 docker exec dns-stack unbound-control stats_noreset
 
-# Check container logs
+# View logs
 docker logs dns-stack
 ```
 
@@ -263,18 +219,14 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-}
-
 test_something() {
     log "Testing something..."
-    # Your test logic here
+    # Test logic here
     log "✓ Test passed"
 }
 
 main() {
-    log "=== Running My Tests ==="
+    log "=== Running Tests ==="
     test_something
     log "=== ✓ All tests passed ==="
 }
@@ -282,45 +234,43 @@ main() {
 main "$@"
 ```
 
-### BATS Test Template
+### BATS Template
 
 ```bash
-@test "description of what is tested" {
+@test "description" {
     run command_to_test
     [ "$status" -eq 0 ]
     [[ "$output" =~ "expected pattern" ]]
 }
 ```
 
-### Adding to CI/CD
+### Add to Project
 
-1. Add script to `tests/` directory
+1. Create script in `tests/` directory
 2. Make executable: `chmod +x tests/test_new.sh`
-3. Add to Makefile under `##@ Testing`
+3. Add target to `Makefile` under `##@ Testing`
 4. Update `.github/workflows/ci-cd.yml` if needed
 
-## Performance Benchmarks
+## Performance
 
-Expected test execution times (on healthy system):
+Expected test times on healthy system:
 
 - Smoke tests: ~30 seconds
 - Integration tests: ~90 seconds
 - BATS tests: ~60 seconds
 - Full suite: ~3 minutes
 
-## Future Improvements
+## CI/CD Integration
 
-Potential enhancements for future versions:
+Tests run automatically in GitHub Actions:
+- Pull requests to main
+- Pushes to main
+- Manual workflow dispatch
 
-- [ ] Performance/load testing with k6 or dnsperf
-- [ ] Security scanning integration
-- [ ] Metrics validation tests
-- [ ] Chaos/failure testing
-- [ ] Configuration validation tests
-- [ ] Test result artifacts (JUnit XML)
-- [ ] Test coverage tracking
-- [ ] Parallel test execution
-- [ ] Container structure tests
+Workflow order:
+1. Smoke tests (fast verification)
+2. Integration tests (comprehensive)
+3. BATS tests (structured validation)
 
 ## References
 
