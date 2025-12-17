@@ -6,7 +6,7 @@ FROM alpine:${ALPINE_VERSION} AS builder
 
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.71"
-ARG VALKEY_VERSION="9.0.0"
+ARG VALKEY_VERSION="9.0.1"
 
 RUN apk update && \
     apk add --no-cache \
