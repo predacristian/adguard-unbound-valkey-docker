@@ -1,4 +1,4 @@
-.PHONY: help build rebuild up down restart logs test test-bats test-smoke test-integration test-unbound test-valkey test-adguard test-cache test-e2e test-ad-blocking test-dot quick-test clean shell status health watch ps clean-all tag push
+.PHONY: help build rebuild up down restart logs test test-bats test-smoke test-integration test-architecture test-unbound test-valkey test-adguard test-cache test-e2e test-ad-blocking test-dot quick-test clean shell status health watch ps clean-all tag push
 
 # Default target
 .DEFAULT_GOAL := help
@@ -95,6 +95,9 @@ test: build ## Run all tests (builds image first, includes integration tests)
 	done
 	@echo ""
 	@echo "$(BLUE)=== Running Smoke Tests ===$(NC)"
+	@echo "$(BLUE)Running architecture validation tests...$(NC)"
+	@docker exec $(CONTAINER_NAME) /tests/test_architecture.sh || (echo "$(RED)Architecture tests failed$(NC)" && $(COMPOSE) down && exit 1)
+	@echo ""
 	@echo "$(BLUE)Running Unbound tests...$(NC)"
 	@docker exec $(CONTAINER_NAME) /tests/test_unbound.sh || (echo "$(RED)Unbound tests failed$(NC)" && $(COMPOSE) down && exit 1)
 	@echo ""
@@ -146,7 +149,8 @@ test-bats: build ## Run BATS integration tests
 
 test-smoke: ## Run only smoke tests (basic functionality)
 	@echo "$(BLUE)Running smoke tests...$(NC)"
-	@docker exec $(CONTAINER_NAME) /tests/test_unbound.sh && \
+	@docker exec $(CONTAINER_NAME) /tests/test_architecture.sh && \
+	 docker exec $(CONTAINER_NAME) /tests/test_unbound.sh && \
 	 docker exec $(CONTAINER_NAME) /tests/test_valkey.sh && \
 	 docker exec $(CONTAINER_NAME) /tests/test_adguard.sh && \
 	 echo "$(GREEN)✓ Smoke tests passed!$(NC)" || echo "$(RED)✗ Smoke tests failed$(NC)"
@@ -157,6 +161,10 @@ test-integration: ## Run only integration tests (container must be running)
 	 docker exec $(CONTAINER_NAME) /tests/test_e2e_query.sh && \
 	 docker exec $(CONTAINER_NAME) /tests/test_ad_blocking.sh && \
 	 echo "$(GREEN)✓ Integration tests passed!$(NC)" || echo "$(RED)✗ Integration tests failed$(NC)"
+
+test-architecture: ## Run only architecture validation tests (container must be running)
+	@echo "$(BLUE)Running architecture validation tests...$(NC)"
+	@docker exec $(CONTAINER_NAME) /tests/test_architecture.sh
 
 test-unbound: ## Run only Unbound tests (container must be running)
 	@echo "$(BLUE)Running Unbound tests...$(NC)"
