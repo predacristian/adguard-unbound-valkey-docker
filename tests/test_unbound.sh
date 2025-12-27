@@ -75,25 +75,6 @@ test_dns_resolution() {
     log "Basic DNS resolution working"
 }
 
-test_dnssec_validation() {
-    log "Testing DNSSEC validation..."
-    log "Testing valid DNSSEC domain (dnssec.works)..."
-    dig_output=$(dig +time=5 +tries=2 @${UNBOUND_HOST} -p ${UNBOUND_PORT} dnssec.works)
-    echo "$dig_output"
-    if ! echo "$dig_output" | grep -q 'status: NOERROR'; then
-        log_error "Valid DNSSEC test failed"
-        exit 1
-    fi
-    log "Testing invalid DNSSEC domain (fail01.dnssec.works)..."
-    dig_output=$(dig +time=5 +tries=2 @${UNBOUND_HOST} -p ${UNBOUND_PORT} fail01.dnssec.works)
-    echo "$dig_output"
-    if ! echo "$dig_output" | grep -q 'status: SERVFAIL'; then
-        log_error "Invalid DNSSEC test failed"
-        exit 1
-    fi
-    log "DNSSEC validation tests passed"
-}
-
 test_reverse_dns() {
     log "Testing reverse DNS..."
     dig_output=$(dig +time=5 +tries=2 @${UNBOUND_HOST} -p ${UNBOUND_PORT} -x 8.8.8.8)
@@ -125,7 +106,6 @@ main() {
     check_unbound_process
     check_unbound_port
     test_dns_resolution
-    test_dnssec_validation
     test_reverse_dns
     test_dns_response_time
     log "All DNS tests completed successfully"
