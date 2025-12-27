@@ -105,6 +105,7 @@ jobs:
       id: smoke_tests
       run: |
         echo "=== Running Smoke Tests ==="
+        docker exec dns-stack-test /tests/test_architecture.sh
         docker exec dns-stack-test /tests/test_unbound.sh
         docker exec dns-stack-test /tests/test_valkey.sh
         docker exec dns-stack-test /tests/test_adguard.sh
