@@ -4,6 +4,9 @@ ARG ALPINE_VERSION="3.23.0"
 # Stage 1: builder
 FROM alpine:${ALPINE_VERSION} AS builder
 
+# Docker automatically provides TARGETARCH (amd64, arm64, arm/v7, etc.)
+ARG TARGETARCH
+
 ARG UNBOUND_VERSION="1.23.1"
 ARG ADGUARD_VERSION="v0.107.71"
 ARG VALKEY_VERSION="9.0.1"
@@ -57,10 +60,18 @@ RUN git clone --branch ${VALKEY_VERSION} --depth 1 https://github.com/valkey-io/
     rm -rf /tmp/valkey
 
 # Download AdGuard Home and verify SHA256 checksum from the same GitHub release.
-RUN wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_amd64.tar.gz" && \
+# Map Docker's TARGETARCH to AdGuard's architecture naming convention.
+RUN case "${TARGETARCH}" in \
+        amd64) ADGUARD_ARCH="amd64" ;; \
+        arm64) ADGUARD_ARCH="arm64" ;; \
+        arm/v7) ADGUARD_ARCH="armv7" ;; \
+        arm) ADGUARD_ARCH="armv7" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+    esac && \
+    wget -O /tmp/AdGuardHome.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/AdGuardHome_linux_${ADGUARD_ARCH}.tar.gz" && \
     wget -O /tmp/adguard-checksums.txt "https://github.com/AdguardTeam/AdGuardHome/releases/download/${ADGUARD_VERSION}/checksums.txt" && \
-    # Extract the checksum for the linux amd64 tarball and verify the downloaded file
-    grep 'AdGuardHome_linux_amd64.tar.gz' /tmp/adguard-checksums.txt | awk '{print $1 "  /tmp/AdGuardHome.tar.gz"}' > /tmp/adguard-checksum && \
+    # Extract the checksum for the target architecture tarball and verify the downloaded file
+    grep "AdGuardHome_linux_${ADGUARD_ARCH}.tar.gz" /tmp/adguard-checksums.txt | awk '{print $1 "  /tmp/AdGuardHome.tar.gz"}' > /tmp/adguard-checksum && \
     sha256sum -c /tmp/adguard-checksum && \
     tar -xzf /tmp/AdGuardHome.tar.gz -C /opt && \
     rm -f /tmp/AdGuardHome.tar.gz /tmp/adguard-checksums.txt /tmp/adguard-checksum
