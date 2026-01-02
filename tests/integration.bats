@@ -128,9 +128,26 @@
 }
 
 @test "DNSSEC validation fails for invalid domains" {
-    run dig @127.0.0.1 -p 5335 fail01.dnssec.works
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "status: SERVFAIL" ]]
+    # Retry logic to handle flaky external test domain
+    max_attempts=3
+    attempt=1
+    success=false
+
+    while [ $attempt -le $max_attempts ]; do
+        # Short timeout to prevent hanging (2 seconds, 1 retry)
+        run timeout 5 dig @127.0.0.1 -p 5335 +time=2 +tries=1 fail01.dnssec.works
+
+        if [ "$status" -eq 0 ] && [[ "$output" =~ "status: SERVFAIL" ]]; then
+            success=true
+            break
+        fi
+
+        echo "Attempt $attempt/$max_attempts failed, retrying..." >&3
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+
+    [ "$success" = true ]
 }
 
 # Test reverse DNS
