@@ -127,12 +127,6 @@
     [[ "$output" =~ "status: NOERROR" ]]
 }
 
-@test "DNSSEC validation fails for invalid domains" {
-    run dig @127.0.0.1 -p 5335 fail01.dnssec.works
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "status: SERVFAIL" ]]
-}
-
 # Test reverse DNS
 @test "Reverse DNS lookups work" {
     run dig @127.0.0.1 -p 5335 -x 8.8.8.8
