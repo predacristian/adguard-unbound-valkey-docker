@@ -1,5 +1,5 @@
 # Pin Alpine for reproducible builds; Renovate will manage ALPINE_VERSION updates via .github/renovate.json
-ARG ALPINE_VERSION="3.23.0"
+ARG ALPINE_VERSION="3.23.2"
 
 # Stage 1: builder
 FROM alpine:${ALPINE_VERSION} AS builder
