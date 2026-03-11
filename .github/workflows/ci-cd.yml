@@ -44,7 +44,7 @@ jobs:
 
     # Build ONLY amd64 for testing (much faster!)
     - name: Build test image (amd64 only)
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         load: true
