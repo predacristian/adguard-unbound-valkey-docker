@@ -1,5 +1,5 @@
 # Pin Alpine for reproducible builds; Renovate will manage ALPINE_VERSION updates via .github/renovate.json
-ARG ALPINE_VERSION="3.23.4"
+ARG ALPINE_VERSION="3.24.1"
 
 # Stage 1: builder
 FROM alpine:${ALPINE_VERSION} AS builder
@@ -8,8 +8,8 @@ FROM alpine:${ALPINE_VERSION} AS builder
 ARG TARGETARCH
 
 ARG UNBOUND_VERSION="1.23.1"
-ARG ADGUARD_VERSION="v0.107.77"
-ARG VALKEY_VERSION="9.1.0"
+ARG ADGUARD_VERSION="v0.107.78"
+ARG VALKEY_VERSION="9.1.1"
 
 RUN apk update && \
     apk add --no-cache \
