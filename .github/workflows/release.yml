@@ -7,15 +7,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
+  security-events: write
 
 jobs:
+  tests:
+    name: Tests (release gate)
+    uses: ./.github/workflows/tests.yml
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
   release:
     name: Semantic Release
+    needs: tests
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
@@ -72,7 +81,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: main
+          # The exact commit that passed the tests above; `main` may have
+          # moved on in the meantime.
+          ref: ${{ github.sha }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
