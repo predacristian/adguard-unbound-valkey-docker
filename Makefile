@@ -46,9 +46,8 @@ up: ## Start the DNS stack locally
 	@echo ""
 	@echo "$(BLUE)Access points:$(NC)"
 	@echo "  DNS: localhost:53"
-	@echo "  DNS over TLS: localhost:853"
 	@echo "  AdGuard Web UI: http://localhost:3000"
-	@echo "  Default credentials: admin/admin"
+	@echo "  Credentials: set ADGUARD_PASSWORD, or read the generated one from 'make logs'"
 
 down: ## Stop the DNS stack
 	@echo "$(YELLOW)Stopping DNS stack...$(NC)"

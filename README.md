@@ -35,7 +35,7 @@ Unbound DNS (port 5335)
         ├──► Cloudflare DNS (1.1.1.1) via DoT
         └──► Valkey Cache (Unix socket)
              • Persistent storage
-             • 8MB cache
+             • 64MB cache (allkeys-lru)
 ```
 
 ## Quick Start
@@ -71,12 +71,15 @@ Point your devices DNS to your host machine's IP address on port 53.
 
 ## Ports
 
-| Port | Service |
-|------|---------|
-| 53 | DNS (TCP/UDP) |
-| 853 | DNS-over-TLS |
-| 3000 | AdGuard Web UI |
-| 8443 | HTTPS (when enabled) |
+| Port | Service | Notes |
+|------|---------|-------|
+| 53 | DNS (TCP/UDP) | AdGuard Home, always on |
+| 3000 | AdGuard Web UI | always on |
+| 853 | DNS-over-TLS | only if `tls.enabled: true` in AdGuardHome.yaml |
+| 443 | DNS-over-HTTPS / HTTPS | only if `tls.enabled: true` in AdGuardHome.yaml |
+
+With the shipped default config (`tls.enabled: false`), nothing listens on
+853 or 443. Outbound upstream queries always use encrypted DoT.
 
 ## Configuration
 
@@ -96,14 +99,16 @@ data/config/
 
 ### Environment Variables
 
-Edit `docker-compose.yml`:
+Only these variables affect the running container:
 
-```yaml
-environment:
-  TZ: "America/New_York"
-  ADGUARD_PASSWORD: "YourPassword"
-  ADGUARD_USERNAME: "admin"
-```
+- `TZ`: timezone
+- `ADGUARD_USERNAME`: web UI username (default `admin`)
+- `ADGUARD_PASSWORD`: web UI password. If unset, a random one is
+  generated and printed in the logs on first run.
+
+> Note: the other variables in `.env.template` are not wired to anything
+> yet. Editing them has no effect; to tune unbound or valkey, edit the
+> files under `config/`.
 
 ### Password Management
 
