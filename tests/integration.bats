@@ -144,17 +144,29 @@
 
 # Test DNSSEC validation
 @test "DNSSEC validation works for valid domains" {
-    run dig @127.0.0.1 -p 5335 dnssec.works
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "status: NOERROR" ]]
+    # Same cold-cache patience as the broken-signature test: the first
+    # query of a signed domain can outlast one dig timeout.
+    result=""
+    for attempt in 1 2 3 4; do
+        result=$(dig +time=10 +tries=1 @127.0.0.1 -p 5335 dnssec.works 2>/dev/null || true)
+        echo "$result" | grep -q "status: NOERROR" && break
+        sleep 3
+    done
+    echo "$result" | grep -q "status: NOERROR"
 }
 
 @test "DNSSEC validation rejects a broken signature" {
     # dnssec-failed.org is deliberately mis-signed. A validating resolver
-    # must return SERVFAIL; NOERROR here means validation is silently off.
-    run dig @127.0.0.1 -p 5335 dnssec-failed.org +time=10 +tries=2
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "status: SERVFAIL" ]]
+    # must return SERVFAIL; NOERROR would mean validation is off. On a
+    # cold cache the validation chain takes a while, and dig may time out
+    # before unbound finishes, so retry for the verdict.
+    result=""
+    for attempt in 1 2 3 4; do
+        result=$(dig +time=10 +tries=1 @127.0.0.1 -p 5335 dnssec-failed.org 2>/dev/null || true)
+        echo "$result" | grep -q "status: SERVFAIL" && break
+        sleep 3
+    done
+    echo "$result" | grep -q "status: SERVFAIL"
 }
 
 # Test reverse DNS
