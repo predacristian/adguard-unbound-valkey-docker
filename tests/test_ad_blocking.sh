@@ -55,44 +55,33 @@ test_known_ad_domain_blocked() {
     log "Testing if known ad domain is blocked..."
 
     test_domain="doubleclick.net"
-    log "Querying $test_domain..."
 
-    result=$(dig @127.0.0.1 -p 53 +short "$test_domain" A 2>&1 | head -1)
+    # AdGuard downloads filter lists asynchronously on first boot,
+    # so retry for up to ~30s before declaring blocking broken.
+    attempt=0
+    max_attempts=6
+    while [ $attempt -lt $max_attempts ]; do
+        attempt=$((attempt + 1))
+        result=$(dig @127.0.0.1 -p 53 +short "$test_domain" A 2>&1 | head -1)
+        log "Attempt $attempt/$max_attempts: '$result'"
 
-    log "Result: '$result'"
-
-    # AdGuard typically returns 0.0.0.0 for blocked domains
-    # or NXDOMAIN, or empty result
-    if echo "$result" | grep -qE "^0\.0\.0\.0|^::$"; then
-        log "✓ Domain blocked (returned block IP)"
-        return 0
-    fi
-
-    if [ -z "$result" ]; then
-        log "✓ Domain blocked (no answer)"
-        return 0
-    fi
-
-    # If we get here, check if it's NXDOMAIN
-    full_result=$(dig @127.0.0.1 -p 53 "$test_domain" A 2>&1)
-    if echo "$full_result" | grep -q "status: NXDOMAIN"; then
-        log "✓ Domain blocked (NXDOMAIN)"
-        return 0
-    fi
-
-    # If we get a real IP, blocking might not be working
-    if echo "$result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-        if [ "$result" != "0.0.0.0" ]; then
-            log "WARNING: Got real IP for ad domain: $result"
-            log "Blocking may not be working correctly!"
-            log "This could mean:"
-            log "  1. AdGuard filters are not loaded"
-            log "  2. This domain is not in the blocklists"
-            log "  3. Blocking is disabled"
+        # Blocked means: no answer, the block IP, or NXDOMAIN.
+        if [ -z "$result" ] || [ "$result" = "0.0.0.0" ] || [ "$result" = "::" ]; then
+            log "OK: Domain blocked (no answer or block IP)"
+            return 0
         fi
-    fi
+        full_result=$(dig @127.0.0.1 -p 53 "$test_domain" A 2>&1)
+        if echo "$full_result" | grep -q "status: NXDOMAIN"; then
+            log "OK: Domain blocked (NXDOMAIN)"
+            return 0
+        fi
+        sleep 5
+    done
 
-    log "✓ Ad domain test completed"
+    # Still resolving a real IP: filters are not blocking. Fail the test.
+    log_error "Domain $test_domain resolved to a real IP ($result) after $max_attempts attempts"
+    log_error "Ad blocking is not working: filters missing, not loaded, or protection disabled"
+    exit 1
 }
 
 # Test 3: Verify legitimate domains are NOT blocked
@@ -217,8 +206,9 @@ test_multiple_ad_domains() {
     log "Blocked $blocked_count out of $tested_count ad domains"
 
     if [ "$blocked_count" -eq 0 ]; then
-        log "WARNING: No ad domains were blocked!"
-        log "This suggests AdGuard filtering is not working properly"
+        log_error "No ad domains were blocked!"
+        log_error "AdGuard filtering is not working (filters not loaded or protection disabled)"
+        exit 1
     elif [ "$blocked_count" -eq "$tested_count" ]; then
         log "✓ All tested ad domains were blocked"
     else

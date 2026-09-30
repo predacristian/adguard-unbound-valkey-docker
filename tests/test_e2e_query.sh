@@ -21,7 +21,7 @@ log_error() {
 test_adguard_resolution() {
     log "Testing DNS resolution through AdGuard (port 53)..."
 
-    result=$(dig @127.0.0.1 -p 53 +short google.com | head -1)
+    result=$(dig +time=5 +tries=1 @127.0.0.1 -p 53 +short google.com 2>/dev/null | grep -v '^;;' | head -1)
 
     if [ -z "$result" ]; then
         log_error "AdGuard DNS query returned no result"
@@ -36,7 +36,7 @@ test_adguard_resolution() {
 test_unbound_resolution() {
     log "Testing DNS resolution through Unbound (port 5335)..."
 
-    result=$(dig @127.0.0.1 -p 5335 +short google.com | head -1)
+    result=$(dig +time=5 +tries=1 @127.0.0.1 -p 5335 +short google.com 2>/dev/null | grep -v '^;;' | head -1)
 
     if [ -z "$result" ]; then
         log_error "Unbound DNS query returned no result"
