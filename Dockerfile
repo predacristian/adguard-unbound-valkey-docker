@@ -88,8 +88,9 @@ RUN apk update && \
     apk add --no-cache \
         busybox-suid \
         curl \
-        unbound \
         bind-tools \
+        libevent \
+        hiredis \
         shadow \
         bats \
         bash \
@@ -101,7 +102,17 @@ COPY config/ ${CONFIG_DEFAULT_PATH}
 COPY entrypoint.sh ${ENTRYPOINT_PATH}
 RUN chmod +x ${ENTRYPOINT_PATH}
 
+# The daemon and its utilities come from one verified tarball build. The
+# distro unbound package is left out on purpose: it would install a second
+# unbound build, with a checkconf from a different release than the daemon
+# (apk ships 1.25.2 while this build is 1.23.1). The runtime libraries
+# libevent and hiredis are installed directly.
 COPY --from=builder /usr/local/sbin/unbound /usr/local/sbin/unbound
+COPY --from=builder /usr/local/sbin/unbound-checkconf /usr/local/sbin/unbound-checkconf
+COPY --from=builder /usr/local/sbin/unbound-control /usr/local/sbin/unbound-control
+COPY --from=builder /usr/local/sbin/unbound-anchor /usr/local/sbin/unbound-anchor
+# Which valkey commit the release tag resolved to at build time.
+COPY --from=builder /tmp/valkey-commit /usr/local/share/valkey-commit
 COPY --from=builder ${ADGUARD_PATH} ${ADGUARD_PATH}
 COPY --from=builder /usr/local/bin/valkey-server /usr/local/bin/valkey-server
 COPY --from=builder /usr/local/bin/valkey-cli /usr/local/bin/valkey-cli
@@ -115,11 +126,13 @@ RUN chmod +x ${ADGUARD_PATH}/AdGuardHome && \
 EXPOSE 53/tcp 53/udp 853/tcp 3000/tcp 443/tcp
 
 # Healthcheck: verify Unbound, Valkey, and AdGuard are responding.
-# - Unbound: dig against local resolver on port 5335
+# - Unbound: dig against local resolver on port 5335. dig prints its
+#   ";; communications error" chatter to stdout on failure, so the grep
+#   must match an answer line that is not a ;; comment.
 # - Valkey: ping via unix socket
 # - AdGuard Home: HTTP check against management UI (port 3000)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 CMD sh -c '\
-    dig +short @127.0.0.1 -p 5335 example.com | grep -q . && \
+    dig +time=5 +tries=1 +short @127.0.0.1 -p 5335 example.com 2>/dev/null | grep -qv "^;;" && \
     /usr/local/bin/valkey-cli -s /tmp/valkey.sock ping >/dev/null 2>&1 && \
     curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1'
 
