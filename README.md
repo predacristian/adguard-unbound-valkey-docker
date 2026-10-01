@@ -6,84 +6,78 @@
 ![Semantic Release](https://img.shields.io/badge/semantic--release-automated-e10079)
 ![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow)
 
-DNS resolver with ad blocking and persistent caching in a single Docker container.
+DNS resolver with ad blocking and caching in a single Docker container.
 
-## What This Does
+## What this does
 
-- Blocks ads and trackers at DNS level
-- Validates DNSSEC signatures
-- Caches DNS queries using Valkey for faster lookups
-- Encrypts upstream DNS queries (DNS over TLS)
-- Web interface for management
+- Blocks ads and trackers at the DNS level
+- Validates DNSSEC signatures and rejects domains with broken ones
+- Caches queries in unbound's memory cache and in Valkey (the RDB snapshot survives container restarts)
+- Forwards upstream queries over DNS-over-TLS
+- Provides a web interface for management
 
 ## Architecture
 
 ```
-DNS Client (your device)
-        │
-        ▼
+DNS client (your device)
+        |
+        v
 AdGuard Home (port 53)
-  • Blocks ads/trackers
-  • Web UI (port 3000)
-        │
-        ▼
-Unbound DNS (port 5335)
-  • DNSSEC validation
-  • Recursive resolution
-  • 384MB memory cache
-        │
-        ├──► Cloudflare DNS (1.1.1.1) via DoT
-        └──► Valkey Cache (Unix socket)
-             • Persistent storage
-             • 64MB cache (allkeys-lru)
+  - blocks ads and trackers
+  - web UI (port 3000)
+        |
+        v
+Unbound (port 5335)
+  - DNSSEC validation
+  - 384MB memory cache
+        |
+        +--> Quad9 / Cloudflare / Mullvad over DoT (port 853)
+        +--> Valkey (unix socket /tmp/valkey.sock)
+               - second-level cache, 64MB, allkeys-lru
 ```
 
-## Quick Start
+Unbound does not recurse on its own. Every query is validated, then
+forwarded to one of the DoT upstreams listed in
+`config/unbound/unbound.conf.d/forward-queries.conf`.
 
-### Requirements
+## Quick start
 
-- Docker 20.10+
-- Docker Compose 2.0+
-- 512MB RAM minimum
-
-### Start the Stack
+Requirements: Docker 20.10+, Docker Compose 2.0+, 512MB RAM.
 
 ```bash
-# Clone repo
-git clone https://github.com/yourusername/adguard-unbound-valkey-docker.git
+git clone https://github.com/predacristian/adguard-unbound-valkey-docker.git
 cd adguard-unbound-valkey-docker
-
-# Start services
 make up
 
-# Get password (auto-generated)
+# First run only: the admin password is generated and printed once
 make logs | grep "Password:"
-
-# Access web UI
-open http://localhost:3000
 ```
 
-Default login: `admin` / (password from logs)
+The web UI is at http://localhost:3000. The username is `admin`; the
+password is random unless you set `ADGUARD_PASSWORD`.
 
-### Configure Devices
-
-Point your devices DNS to your host machine's IP address on port 53.
+Point your devices' DNS at the host machine's IP, port 53.
 
 ## Ports
 
 | Port | Service | Notes |
 |------|---------|-------|
 | 53 | DNS (TCP/UDP) | AdGuard Home, always on |
-| 3000 | AdGuard Web UI | always on |
-| 853 | DNS-over-TLS | only if `tls.enabled: true` in AdGuardHome.yaml |
-| 443 | DNS-over-HTTPS / HTTPS | only if `tls.enabled: true` in AdGuardHome.yaml |
+| 3000 | AdGuard web UI | always on |
+| 853 | DNS-over-TLS | only when `tls.enabled: true` in AdGuardHome.yaml |
+| 443 | DNS-over-HTTPS / HTTPS | only when `tls.enabled: true` in AdGuardHome.yaml |
 
-With the shipped default config (`tls.enabled: false`), nothing listens on
-853 or 443. Outbound upstream queries always use encrypted DoT.
+With the shipped config (`tls.enabled: false`) nothing listens on 853
+or 443. Upstream queries are always encrypted.
+
+Unbound itself refuses recursion from anything but localhost, so even
+on a published port you expose AdGuard, not an open resolver.
 
 ## Configuration
 
-### Directory Structure
+The container keeps its configuration in `data/config/`, bind-mounted
+at `/config`. On first start the defaults from `config/` are copied
+there. After that, edit the copies in `data/config/`.
 
 ```
 data/config/
@@ -97,160 +91,142 @@ data/config/
     └── valkey.conf
 ```
 
-### Environment Variables
+### Environment variables
 
-Only these variables affect the running container:
+Only these affect the running container:
 
 - `TZ`: timezone
 - `ADGUARD_USERNAME`: web UI username (default `admin`)
 - `ADGUARD_PASSWORD`: web UI password. If unset, a random one is
   generated and printed in the logs on first run.
 
-> Note: the other variables in `.env.template` are not wired to anything
-> yet. Editing them has no effect; to tune unbound or valkey, edit the
-> files under `config/`.
+The other variables in `.env.template` are not wired to anything yet.
+To tune unbound or valkey, edit the files under `config/`.
 
-### Password Management
+### Resetting the admin password
 
-**Auto-generated:**
-- Random password if `ADGUARD_PASSWORD` not set
-- Shown in logs on first run
-- Saved to `.credentials` file
-
-**Reset password:**
 ```bash
 make down
 rm ./data/config/AdGuardHome/.credentials
 make up
 ```
 
+The next start generates a new password and prints it in the logs.
+
+## Reliability
+
+- The image has a Docker healthcheck: a DNS query through unbound, a
+  valkey ping, and an HTTP check of the AdGuard UI. `make health`
+  shows its status.
+- The entrypoint runs the same probes roughly every 30 seconds. If a
+  service dies or hangs, the container exits with an error and the
+  restart policy (`restart: unless-stopped`) starts the whole stack
+  again.
+- Restarting the container keeps the valkey snapshot; recreating it
+  (new image, changed compose file) starts with a cold cache.
+
 ## Usage
 
-### Makefile Commands
-
 ```bash
-make up           # Start stack
-make down         # Stop stack
-make restart      # Restart services
-make logs         # View logs
-make status       # Container status
-make health       # Health check
-make shell        # Open shell
+make up           # start the stack
+make down         # stop it
+make restart      # restart services
+make logs         # follow logs
+make status       # container status
+make health       # healthcheck status
+make shell        # shell inside the container
 ```
 
 ### Testing DNS
 
 ```bash
-# Test DNS resolution
-dig @localhost example.com
-
-# Test AAAA record
-dig @localhost AAAA example.com
-
-# Check if ads are blocked
-dig @localhost ads.example.com
+dig @localhost example.com          # resolution
+dig @localhost AAAA example.com     # IPv6
+dig @localhost doubleclick.net      # blocked: no answer or 0.0.0.0
 ```
 
-### Monitoring Services
+### Inside the container
 
 ```bash
-# Check health
-make health
-
-# Watch logs
-make logs
-
-# Inside container
-make shell
-unbound-control status
-valkey-cli -s /tmp/valkey.sock PING
+dig +short @127.0.0.1 -p 5335 example.com   # query unbound directly
+valkey-cli -s /tmp/valkey.sock PING         # cache reachable
+valkey-cli -s /tmp/valkey.sock DBSIZE       # cached entries
 ```
 
 ## Testing
 
-Full test suite included:
-
 ```bash
-make test              # All tests (~3 min)
-make test-smoke        # Quick health checks (~30s)
-make test-integration  # Component integration (~90s)
-make test-cache        # Cache functionality
-make test-e2e          # End-to-end queries
+make test              # build, start, run everything, tear down (~3 min)
+make test-smoke        # smoke checks (~30s)
+make test-integration  # component integration (~90s)
+make test-cache        # cachedb integration
+make test-e2e          # end-to-end queries
+make test-bats         # BATS suite
 ```
 
-See [tests/README.md](tests/README.md) for details.
+Details, per-script coverage, and debugging tips are in
+[tests/README.md](tests/README.md).
 
 ## Building
 
 ```bash
-# Build image
-make build
+make build     # with cache
+make rebuild   # without cache
 
-# Build without cache
-make rebuild
-
-# Custom versions
+# Override component versions
 docker build \
   --build-arg UNBOUND_VERSION=1.23.1 \
-  --build-arg ADGUARD_VERSION=v0.107.71 \
+  --build-arg ADGUARD_VERSION=v0.107.79 \
   -t dns-stack:custom .
 ```
 
 ## Development
 
-### Pre-commit Hooks
+Install the hooks once:
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
 
-Includes: shellcheck, hadolint, secret detection, YAML validation
+They run shellcheck, hadolint, secret detection, and YAML validation.
 
-### Commit Format
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`); semantic-release
+derives the version from them.
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+To make a change:
 
-```bash
-git commit -m "feat: add new feature"
-git commit -m "fix: correct bug"
-git commit -m "docs: update readme"
-```
+1. Branch off main: `git checkout -b feature/name`
+2. Make the change
+3. Verify: `make rebuild && make test`
+4. Commit and push, open a PR
+5. CI builds and runs the suite against the PR
 
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+## CI and releases
 
-### Making Changes
-
-1. Create branch: `git checkout -b feature/name`
-2. Make changes
-3. Test: `make rebuild && make test`
-4. Commit and push
-5. Create PR
-
-## CI/CD
-
-GitHub Actions workflows:
-- **ci-cd.yml**: Build multi-arch images, run tests, push to GHCR
-- **security.yml**: Trivy + Gitleaks scanning
-- **release.yml**: Semantic versioning and releases
-
-Releases created automatically on merge to `main`.
+- Pull requests run the full suite from `.github/workflows/tests.yml`:
+  image build, health wait, smoke, integration, and BATS tests.
+- Pushes to main run the same suite, and a release publishes only if
+  it passes. semantic-release then cuts the version and the amd64 and
+  arm64 images are pushed to GHCR.
+- Renovate updates dependencies and automerges only once that suite
+  is green.
+- `security.yml` runs Trivy and Gitleaks daily.
 
 ## Security
 
-### Scanning
+- Trivy scans the built image on every PR and daily on main. A fixable
+  CRITICAL finding fails the build. Findings appear under the
+  repository's Security tab.
+- Gitleaks scans the entire git history daily.
 
-- **Trivy**: Container vulnerability scanning
-- **Gitleaks**: Secret detection in git history
+Recommendations:
 
-Results: Repository → Security tab
-
-### Recommendations
-
-- Set custom password in `docker-compose.yml`
-- Use specific version tags (not `:latest`)
-- Keep images updated
-- Restrict web UI to localhost if needed:
+- Set `ADGUARD_PASSWORD` instead of relying on the generated one
+- Pin an exact version tag rather than `:latest`
+- If the web UI should not be reachable from the network, bind it to
+  localhost:
   ```yaml
   ports:
     - "127.0.0.1:3000:3000"
@@ -258,65 +234,51 @@ Results: Repository → Security tab
 
 ## Troubleshooting
 
-### Can't Login
+### Cannot log in
 
 ```bash
-# Get password
 docker logs dns-stack | grep "Password:"
-
-# Reset
-make down
-rm ./data/config/AdGuardHome/.credentials
-make up
 ```
 
-### DNS Not Working
+To force a new password, see [Resetting the admin password](#resetting-the-admin-password).
+
+### DNS not working
 
 ```bash
-# Check health
 make health
-
-# Test resolution
 dig @localhost example.com
-
-# Check logs
 make logs
 ```
 
-### Cache Issues
+### Cache problems
 
 ```bash
 make shell
 valkey-cli -s /tmp/valkey.sock PING
-valkey-cli -s /tmp/valkey.sock KEYS "*"
+valkey-cli -s /tmp/valkey.sock DBSIZE
 ```
 
-### Port 53 Conflict
+### Port 53 already in use
 
 ```bash
-# Check what's using port
 sudo lsof -i :53
 
-# Stop systemd-resolved
-sudo systemctl stop systemd-resolved
-sudo systemctl disable systemd-resolved
+# on systemd distros, stop and disable the local stub resolver
+sudo systemctl disable --now systemd-resolved
 ```
 
-### Container Crashes
+### Container keeps restarting
 
 ```bash
-# View logs
 docker logs dns-stack
 ```
 
-Common causes:
-- Insufficient memory (need 512MB+)
-- Port conflicts
-- Missing capabilities (NET_ADMIN, NET_BIND_SERVICE)
+Usual causes: not enough memory (512MB minimum), a port conflict, or
+missing NET_ADMIN / NET_BIND_SERVICE capabilities.
 
 ## License
 
-MIT License
+MIT
 
 ## Acknowledgments
 

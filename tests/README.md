@@ -1,280 +1,127 @@
-# DNS Stack Test Suite
+# DNS stack test suite
 
-Tests for the DNS Stack (AdGuard + Unbound + Valkey).
+The suite runs against a live container: AdGuard Home on port 53,
+unbound on 5335, valkey on the unix socket at `/tmp/valkey.sock`.
 
-## Test Structure
+## Layout
 
 ```
 tests/
-├── test_unbound.sh              # Unbound smoke tests
-├── test_valkey.sh               # Valkey smoke tests
-├── test_adguard.sh              # AdGuard smoke tests
-├── test_cache_integration.sh    # Cache functionality
-├── test_e2e_query.sh            # End-to-end query path
-├── test_ad_blocking.sh          # Ad blocking tests
-├── test_dot.sh                  # DNS over TLS tests
-└── integration.bats             # BATS test suite
+├── test_architecture.sh       # AdGuard binary exists, runs, matches the CPU
+├── test_unbound.sh            # process, port, resolution, reverse DNS, timing
+├── test_valkey.sh             # process, socket, PING, SET/GET/DEL, timing
+├── test_adguard.sh            # process, port, web UI, DNS through port 53
+├── test_cache_integration.sh  # unbound-to-valkey cachedb integration
+├── test_e2e_query.sh          # full query path and record types
+├── test_ad_blocking.sh        # ad domains blocked, legitimate domains resolve
+├── test_dot.sh                # reports the DoT state (see below)
+└── integration.bats           # BATS suite covering all of the above
 ```
 
-## Running Tests
-
-### Prerequisites
-
-Container must be running:
-```bash
-make up
-# Wait 30-45 seconds for services to be healthy
-make status
-```
-
-### Quick Start
+## Running
 
 ```bash
-# All tests
-make test
-
-# Smoke tests only (fast)
-make test-smoke
-
-# Integration tests only
-make test-integration
-
-# BATS tests
-make test-bats
+make up          # start the stack, wait for healthy
+make test        # build, start, run everything, tear down (~3 min)
+make test-smoke  # the four smoke scripts (~30s)
+make test-bats   # just the BATS suite (~60s)
 ```
 
-### Individual Tests
+The individual suites need a running container:
 
 ```bash
-make test-unbound        # DNS resolution, DNSSEC
-make test-valkey         # Cache connectivity
-make test-adguard        # Web UI, DNS queries
-make test-cache          # Cache integration (important)
-make test-e2e            # Full query chain
-make test-ad-blocking    # Ad blocking functionality
+make test-unbound
+make test-valkey
+make test-adguard
+make test-cache
+make test-e2e
+make test-ad-blocking
+make test-dot
 ```
 
-## What Each Test Does
+## What the tests assert
 
-### Smoke Tests (30 seconds)
+Smoke: each service process is up, listening, and answering. Unbound
+must resolve within 1 second; valkey must round-trip a write and read.
 
-Basic health checks for each service.
+Cache integration: the unix socket exists with the right permissions,
+and after a query through unbound the valkey key count grows. A query
+answered from unbound's memory cache never reaches valkey, so the
+BATS cache tests try several domains until one misses memory; if none
+of them lands in valkey, the test fails.
 
-**test_unbound.sh** - 6 tests
-- Process running
-- Port listening
-- DNS resolution works
-- DNSSEC validation
-- Reverse DNS
-- Response time check
+Ad blocking: doubleclick.net must not resolve to a real IP. The test
+retries for about 30 seconds because AdGuard downloads filter lists
+asynchronously on first boot; after that a real IP is a failure.
+google.com, github.com and cloudflare.com must resolve.
 
-**test_valkey.sh** - 5 tests
-- Process running
-- Unix socket exists
-- PING/PONG works
-- SET/GET/EXISTS/DEL operations
-- Response time check
+DNSSEC: dnssec.works must return NOERROR, and dnssec-failed.org
+(deliberately mis-signed) must return SERVFAIL. Both tests retry, since
+a cold cache can take longer than one dig round to validate a chain.
 
-**test_adguard.sh** - 4 tests
-- Process running
-- Port listening
-- Web UI accessible
-- DNS resolution through AdGuard
+DoT: with the shipped config nothing listens on 853, and the suite
+asserts that. If you enable TLS in the AdGuard config, update the
+assertion in `integration.bats`.
 
-### Integration Tests (2 minutes)
+Timing: queries through the full chain stay within the per-test bounds
+(a couple of seconds).
 
-Tests for component interactions.
+## CI
 
-**test_cache_integration.sh** - 7 tests
-- Unix socket exists
-- Socket permissions correct
-- Unbound caches in Valkey
-- Cache hit improves performance
-- Cache data structure valid
-- Cache memory usage
+The suite runs on pull requests, on `renovate/**` branches, and on
+main before a release publishes. It lives in
+`.github/workflows/tests.yml`; the order is smoke, integration, BATS,
+then Trivy. A fixable CRITICAL Trivy finding fails the run.
 
-**test_e2e_query.sh** - 7 tests
-- AdGuard → Unbound forwarding
-- Unbound → Cloudflare forwarding
-- Full query path with caching
-- Multiple record types (A, AAAA, MX, TXT)
-- Query timing (cache miss vs hit)
+## Debugging a failure
 
-**test_ad_blocking.sh** - 7 tests
-- Filtering enabled
-- Known ad domains blocked
-- Legitimate domains allowed
-- Filter lists loaded
-- Statistics tracking
-- DNSSEC works with blocking
-
-**test_dot.sh** - 6 tests
-- DoT port (853) listening
-- TLS connection tests
-- Unbound DoT configuration
-- Upstream DoT status
-
-### BATS Tests (1 minute)
-
-Structured test suite with TAP output format.
-
-**integration.bats** - 17 tests
-- Combines key tests from all categories
-- Better output format
-- Better assertions
-
-## Test Results
-
-**Bash scripts output:**
-```
-[2025-12-09 00:00:00] Running tests...
-[2025-12-09 00:00:01] ✓ Socket exists
-[2025-12-09 00:00:02] ✓ Cache working
-```
-
-**BATS output (TAP format):**
-```
-1..17
-ok 1 Valkey socket accessible
-ok 2 Unbound caches in Valkey
-ok 3 Cache improves performance
-```
-
-## What Gets Tested
-
-**Working:**
-- DNS resolution (all record types)
-- DNSSEC validation
-- Reverse DNS
-- Query forwarding chain
-- Unbound → Valkey caching
-- Ad blocking
-- Cache hit/miss behavior
-- Response times
-
-**Not tested:**
-- Load testing
-- IPv6 queries
-- Certificate management
-- Service recovery
-- Rate limiting
-
-## Troubleshooting
-
-### "Valkey socket not found"
-
-Check entrypoint started Valkey:
 ```bash
 make logs
-docker exec dns-stack ls -la /tmp/valkey.sock
+docker exec dns-stack dig +short @127.0.0.1 -p 5335 example.com
+docker exec dns-stack valkey-cli -s /tmp/valkey.sock INFO memory
 ```
 
-### "No cache entries after query"
+Valkey socket not found: valkey did not start. Look for its startup
+error in `make logs`.
 
-This means caching is broken:
-```bash
-# Check Valkey running
-docker exec dns-stack valkey-cli -s /tmp/valkey.sock PING
+No cache entries after a query: either unbound served the answer from
+its memory cache, or cachedb is broken. The BATS cache tests rule out
+the first case by trying several domains.
 
-# Check Unbound config
-docker exec dns-stack grep -r cachedb /config/unbound/
-```
-
-### "Ad domains not blocked"
-
-Check AdGuard protection enabled:
-```bash
-docker exec dns-stack curl -s http://localhost:3000/control/status | grep protection_enabled
-```
-
-### "DoT tests skipped"
-
-Expected - DoT requires TLS certificate configuration. Port 853 is exposed but TLS not configured by default.
-
-## Debug Mode
+Ad domains not blocked: the filters may still be downloading. Check
+whether protection is on:
 
 ```bash
-# Enable debug in scripts
-DEBUG=1 docker exec dns-stack /tests/test_cache_integration.sh
-
-# Check Valkey
-docker exec dns-stack valkey-cli -s /tmp/valkey.sock INFO
-
-# Check Unbound stats
-docker exec dns-stack unbound-control stats_noreset
-
-# View logs
-docker logs dns-stack
+docker exec dns-stack curl -s http://127.0.0.1:3000/control/status | grep protection_enabled
 ```
 
-## Adding New Tests
+One gotcha in any custom test: dig prints its `;; communications error`
+chatter to stdout on failure, so filter those lines before checking
+that a query returned an answer.
 
-### Bash Script Template
+## Adding a test
 
-```bash
-#!/bin/sh
-set -e
-
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-}
-
-test_something() {
-    log "Testing something..."
-    # Test logic here
-    log "✓ Test passed"
-}
-
-main() {
-    log "=== Running Tests ==="
-    test_something
-    log "=== ✓ All tests passed ==="
-}
-
-main "$@"
-```
-
-### BATS Template
+Shell scripts follow the existing shape: `log`, one function per
+check, failures `exit 1`, a `main` that calls them in order under
+`set -e`. In BATS:
 
 ```bash
 @test "description" {
-    run command_to_test
+    run sh -c "dig +time=5 +tries=1 @127.0.0.1 -p 5335 +short example.org 2>/dev/null | grep -v '^;;'"
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "expected pattern" ]]
+    [ -n "$output" ]
 }
 ```
 
-### Add to Project
+Then:
 
-1. Create script in `tests/` directory
-2. Make executable: `chmod +x tests/test_new.sh`
-3. Add target to `Makefile` under `##@ Testing`
-4. Update `.github/workflows/ci-cd.yml` if needed
-
-## Performance
-
-Expected test times on healthy system:
-
-- Smoke tests: ~30 seconds
-- Integration tests: ~90 seconds
-- BATS tests: ~60 seconds
-- Full suite: ~3 minutes
-
-## CI/CD Integration
-
-Tests run automatically in GitHub Actions:
-- Pull requests to main
-- Pushes to main
-- Manual workflow dispatch
-
-Workflow order:
-1. Smoke tests (fast verification)
-2. Integration tests (comprehensive)
-3. BATS tests (structured validation)
+1. Put the script in `tests/` and make it executable.
+2. Add a make target under `##@ Testing` in the Makefile.
+3. Wire it into `.github/workflows/tests.yml` if it should gate CI.
 
 ## References
 
-- [BATS Documentation](https://bats-core.readthedocs.io/)
-- [Unbound Documentation](https://nlnetlabs.nl/documentation/unbound/)
-- [Valkey Documentation](https://valkey.io/documentation/)
+- [BATS documentation](https://bats-core.readthedocs.io/)
+- [Unbound documentation](https://nlnetlabs.nl/documentation/unbound/)
+- [Valkey documentation](https://valkey.io/documentation/)
 - [AdGuard Home API](https://github.com/AdguardTeam/AdGuardHome/wiki/API)
