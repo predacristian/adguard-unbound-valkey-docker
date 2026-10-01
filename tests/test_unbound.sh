@@ -67,7 +67,9 @@ check_unbound_port() {
 
 test_dns_resolution() {
     log "Testing basic DNS resolution..."
-    retry "dig_output=\$(dig +short @${UNBOUND_HOST} -p ${UNBOUND_PORT} google.com); [ -n \"\$dig_output\" ]" "$MAX_ATTEMPTS" "$SLEEP_SECONDS"
+    # Filter dig's ";;" failure chatter; raw dig output is non-empty even
+    # when there is no answer.
+    retry "dig_output=\$(dig +time=5 +tries=1 +short @${UNBOUND_HOST} -p ${UNBOUND_PORT} google.com 2>/dev/null | grep -v '^;;'); [ -n \"\$dig_output\" ]" "$MAX_ATTEMPTS" "$SLEEP_SECONDS"
     if [ $? -ne 0 ]; then
         log_error "Basic DNS resolution test failed"
         exit 1

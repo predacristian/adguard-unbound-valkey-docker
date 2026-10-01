@@ -11,22 +11,24 @@
 }
 
 @test "Unbound caches DNS queries in Valkey" {
-    run valkey-cli -s /tmp/valkey.sock FLUSHALL
-    [ "$status" -eq 0 ]
+    # A domain already warm in unbound's memory cache never reaches cachedb,
+    # so try a few candidates until one lands in Valkey.
+    added=0
+    for domain in wikipedia.org archive.org debian.org mozilla.org; do
+        valkey-cli -s /tmp/valkey.sock FLUSHALL >/dev/null
+        keys_before=$(valkey-cli -s /tmp/valkey.sock DBSIZE)
 
-    run valkey-cli -s /tmp/valkey.sock DBSIZE
-    [ "$output" = "(integer) 0" ] || [ "$output" = "0" ]
+        dig @127.0.0.1 -p 5335 +short "$domain" >/dev/null 2>&1
+        sleep 3
 
-    run dig @127.0.0.1 -p 5335 +short example.com
-    [ "$status" -eq 0 ]
-    [ -n "$output" ]
+        keys_after=$(valkey-cli -s /tmp/valkey.sock DBSIZE)
+        if [ "$keys_after" -gt "$keys_before" ]; then
+            added=1
+            break
+        fi
+    done
 
-    sleep 3
-
-    # Note: Query may stay in Unbound's memory cache (normal behavior)
-    # cachedb is for overflow/persistence, not all queries reach Valkey
-    run valkey-cli -s /tmp/valkey.sock DBSIZE
-    [ "$status" -eq 0 ]
+    [ "$added" -eq 1 ]
 }
 
 @test "Cache hits improve query performance" {
@@ -50,29 +52,37 @@
 
 # Test end-to-end query path
 @test "AdGuard resolves DNS queries" {
-    run dig @127.0.0.1 -p 53 +short google.com
+    # dig prints ";; ..." chatter to stdout on failure; grep -v '^;;'
+    # exits non-zero when there is no real answer line.
+    run sh -c "dig +time=5 +tries=1 @127.0.0.1 -p 53 +short google.com 2>/dev/null | grep -v '^;;'"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }
 
 @test "Unbound resolves DNS queries" {
-    run dig @127.0.0.1 -p 5335 +short google.com
+    run sh -c "dig +time=5 +tries=1 @127.0.0.1 -p 5335 +short google.com 2>/dev/null | grep -v '^;;'"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }
 
 @test "AdGuard forwards queries to Unbound (verified by cache)" {
-    valkey-cli -s /tmp/valkey.sock FLUSHALL
+    # Same as above: try candidates until one query through AdGuard
+    # (port 53) lands in Valkey via unbound's cachedb.
+    added=0
+    for domain in openstreetmap.org kernel.org python.org rust-lang.org; do
+        valkey-cli -s /tmp/valkey.sock FLUSHALL >/dev/null
 
-    run dig @127.0.0.1 -p 53 +short example.com
-    [ "$status" -eq 0 ]
+        dig @127.0.0.1 -p 53 +short "$domain" >/dev/null 2>&1
+        sleep 3
 
-    sleep 1
+        keys=$(valkey-cli -s /tmp/valkey.sock DBSIZE)
+        if [ "$keys" -gt 0 ]; then
+            added=1
+            break
+        fi
+    done
 
-    # Check if Valkey has cache entries (proves Unbound was used)
-    run valkey-cli -s /tmp/valkey.sock DBSIZE
-    [ "$status" -eq 0 ]
-    [[ ! "$output" =~ "keys=0" ]]
+    [ "$added" -eq 1 ]
 }
 
 @test "Multiple DNS record types work" {
@@ -108,23 +118,55 @@
     run dig @127.0.0.1 -p 53 +short doubleclick.net A
     [ "$status" -eq 0 ]
 
-    # Should be blocked (0.0.0.0), NXDOMAIN, or empty
-    # We accept any of these as valid blocking behaviors
-    [[ "$output" =~ ^0\.0\.0\.0 ]] || [[ "$output" =~ ^::$ ]] || [ -z "$output" ] || true
+    # doubleclick.net is on the default AdGuard DNS filter. Filters download
+    # asynchronously on first boot, so retry briefly before failing.
+    blocked=0
+    for attempt in 1 2 3 4 5 6; do
+        result=$(dig @127.0.0.1 -p 53 +short doubleclick.net A | head -1)
+        if [ -z "$result" ] || [ "$result" = "0.0.0.0" ] || [ "$result" = "::" ]; then
+            blocked=1
+            break
+        fi
+        sleep 5
+    done
+
+    [ "$blocked" -eq 1 ]
 }
 
 # Test DNS over TLS
-@test "DoT port 853 is exposed" {
-    # Check if port is listening
-    run sh -c "ss -tuln 2>/dev/null | grep ':853' || netstat -tuln 2>/dev/null | grep ':853' || true"
-    [ "$status" -eq 0 ]
+@test "No DoT listener when TLS is disabled" {
+    # The seed config ships tls.enabled=false; nothing may listen on 853.
+    # Guards against accidental TLS exposure. If you enable TLS in the seed
+    # config, update this test.
+    run sh -c "ss -tuln 2>/dev/null | grep ':853'"
+    [ "$status" -ne 0 ]
 }
 
 # Test DNSSEC validation
 @test "DNSSEC validation works for valid domains" {
-    run dig @127.0.0.1 -p 5335 dnssec.works
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "status: NOERROR" ]]
+    # Same cold-cache patience as the broken-signature test: the first
+    # query of a signed domain can outlast one dig timeout.
+    result=""
+    for attempt in 1 2 3 4; do
+        result=$(dig +time=10 +tries=1 @127.0.0.1 -p 5335 dnssec.works 2>/dev/null || true)
+        echo "$result" | grep -q "status: NOERROR" && break
+        sleep 3
+    done
+    echo "$result" | grep -q "status: NOERROR"
+}
+
+@test "DNSSEC validation rejects a broken signature" {
+    # dnssec-failed.org is deliberately mis-signed. A validating resolver
+    # must return SERVFAIL; NOERROR would mean validation is off. On a
+    # cold cache the validation chain takes a while, and dig may time out
+    # before unbound finishes, so retry for the verdict.
+    result=""
+    for attempt in 1 2 3 4; do
+        result=$(dig +time=10 +tries=1 @127.0.0.1 -p 5335 dnssec-failed.org 2>/dev/null || true)
+        echo "$result" | grep -q "status: SERVFAIL" && break
+        sleep 3
+    done
+    echo "$result" | grep -q "status: SERVFAIL"
 }
 
 # Test reverse DNS

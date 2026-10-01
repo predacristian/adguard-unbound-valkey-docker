@@ -38,7 +38,7 @@
       ],
       "automerge": true,
       "automergeType": "branch",
-      "requiredStatusChecks": null,
+      "requiredStatusChecks": ["build-and-test"],
       "minimumReleaseAge": "3 days"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "automerge": true,
       "automergeType": "branch",
-      "requiredStatusChecks": null,
+      "requiredStatusChecks": ["build-and-test"],
       "minimumReleaseAge": "7 days"
     },
     {

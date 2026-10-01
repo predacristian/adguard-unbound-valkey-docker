@@ -17,6 +17,7 @@ cleanup() {
         kill $(cat /opt/adguardhome/adguard.pid) 2>/dev/null || true
         rm -f /opt/adguardhome/adguard.pid
     fi
+    kill ${ADGUARD_PID:-0} 2>/dev/null || true
 
     killall unbound 2>/dev/null || true
 
@@ -148,6 +149,15 @@ setup_adguard_credentials() {
     local username="${ADGUARD_USERNAME:-admin}"
     local password="${ADGUARD_PASSWORD:-}"
 
+    # The username is written into YAML with awk below; refuse characters
+    # that would break the substitution or the YAML.
+    case "$username" in
+        *'&'* | *'\'* | *[[:space:]]*)
+            log_error "ADGUARD_USERNAME contains unsupported characters"
+            return 1
+            ;;
+    esac
+
     if [ -z "$password" ]; then
         password=$(openssl rand -base64 16 | tr -d '/+=' | cut -c1-16)
         log "Generated random password for AdGuard Home"
@@ -167,8 +177,29 @@ setup_adguard_credentials() {
     fi
 
     if [ -f "$config_file" ]; then
-        sed -i "s/name: .*/name: $username/" "$config_file"
-        sed -i "s|password: .*|password: $password_hash|" "$config_file"
+        # Keep the edit inside the users: block. A file-wide substitution
+        # would also rewrite keys like server_name, interface_name,
+        # local_domain_name and the filter names.
+        local tmp_file="${config_file}.tmp"
+        awk -v un="$username" -v pw="$password_hash" '
+            /^users:[[:space:]]*$/ { in_users = 1; print; next }
+            in_users && /^[[:alpha:]]/ { in_users = 0 }
+            in_users && /^([[:space:]]*- )name:/ && !done_name {
+                sub(/name: .*/, "name: " un); done_name = 1
+            }
+            in_users && /^[[:space:]]+password:/ && !done_pw {
+                sub(/password: .*/, "password: " pw); done_pw = 1
+            }
+            { print }
+        ' "$config_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+        mv "$tmp_file" "$config_file"
+    fi
+
+    # Fail closed: if the substitution did not land, the config still holds
+    # the public default hash from the repo and anyone could log in.
+    if ! grep -Fq "$password_hash" "$config_file"; then
+        log_error "Credential substitution failed; refusing to start with the public default hash"
+        return 1
     fi
 
     if [ "$password" != "admin" ]; then
@@ -254,6 +285,17 @@ start_adguard() {
     wait_for_service "AdGuard Home" "curl -s http://127.0.0.1:3000 >/dev/null"
 }
 
+# The same probes as the Docker HEALTHCHECK. kill -0 in the supervision
+# loop cannot see a hung process, but these can. dig prints its
+# ";; communications error" chatter to stdout on failure, so the grep
+# needs a line that is not a ;; comment; otherwise a dead resolver
+# looks healthy.
+self_health_check() {
+    dig +time=3 +tries=1 +short @127.0.0.1 -p 5335 example.com 2>/dev/null | grep -qv '^;;' &&
+        /usr/local/bin/valkey-cli -s /tmp/valkey.sock ping >/dev/null 2>&1 &&
+        curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1
+}
+
 main() {
     log "Starting DNS Stack..."
 
@@ -270,20 +312,35 @@ main() {
     log "All services started. DNS Stack ready."
     log "AdGuard Home: http://localhost:3000"
 
+    # Any service death exits the container and lets the restart policy
+    # bring the whole stack back; per-service restarts are not worth the
+    # supervision code here. Every third pass (~30s) run the full probe,
+    # since kill -0 succeeds on a hung process.
+    health_counter=0
+
     while true; do
         if ! kill -0 $UNBOUND_PID 2>/dev/null; then
-            log_error "Unbound died, restarting..."
+            log_error "Unbound died, exiting so the container restarts"
             exit 1
         fi
 
         if ! kill -0 $ADGUARD_PID 2>/dev/null; then
-            log_error "AdGuard died, restarting..."
+            log_error "AdGuard died, exiting so the container restarts"
             exit 1
         fi
 
         if ! valkey-cli -p 6379 ping >/dev/null 2>&1; then
-            log_error "Valkey not responding, restarting..."
+            log_error "Valkey not responding, exiting so the container restarts"
             exit 1
+        fi
+
+        health_counter=$((health_counter + 1))
+        if [ $health_counter -ge 3 ]; then
+            health_counter=0
+            if ! self_health_check; then
+                log_error "Self-health check failed (unbound/valkey/adguard probe), exiting so the container restarts"
+                exit 1
+            fi
         fi
 
         sleep 10
