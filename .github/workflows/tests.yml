@@ -137,6 +137,10 @@ jobs:
       if: always() && hashFiles('trivy-results.sarif') != ''
       with:
         sarif_file: 'trivy-results.sarif'
+        # One category for PR runs (ci-cd.yml) and main runs (release.yml);
+        # the implicit one differs per calling workflow, which leaves PR
+        # checks without a default-branch baseline to compare against.
+        category: 'trivy-image'
 
     - name: Test Summary
       if: always()
